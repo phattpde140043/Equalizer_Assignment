@@ -2,11 +2,16 @@ import tkinter as tk
 from tkinter import filedialog
 from AudioPlayer import AudioPlayer
 import Controller.Main_controller as control
+import tkinter.ttk as ttk
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import common.utils as util
+import numpy as np
 
 # Tạo Cửa sổ chính
 root = tk.Tk()
 root.title("Giao diện chính")
-root.geometry("1200x400")       # Kích thước ban đầu
+root.geometry("1200x900")       # Kích thước ban đầu
 root.minsize(400, 300)         # Kích thước tối thiểu: không thể nhỏ hơn
 
 # === Tạo đối tượng AudioPlayer ===
@@ -22,16 +27,6 @@ btn_show.pack(side=tk.LEFT, padx=10)
 
 btn_upload = tk.Button(control_frame, text="Upload file audio", command = lambda: control.handle_upload(player,root))
 btn_upload.pack(side=tk.LEFT, padx=10)
-
-
-#btn_play = tk.Button(control_frame, text="▶ Play", command= lambda: control.handle_play(player))
-#btn_play.pack(side=tk.LEFT, padx=5)
-
-#btn_pause = tk.Button(control_frame, text="⏸ Pause", command=lambda: control.handle_pause(player))
-#btn_pause.pack(side=tk.LEFT, padx=5)
-
-#btn_stop = tk.Button(control_frame, text="⏹ Stop", command=lambda: control.handle_stop(player))
-#btn_stop.pack(side=tk.LEFT, padx=5)
 
 # --- Main frame chính giữa control_frame và footer ---
 main_frame = tk.Frame(root)
@@ -50,6 +45,118 @@ left_chart_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,4))
 
 right_chart_container = tk.Frame(chart_frame)
 right_chart_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4,0))
+
+# Hàm tiện ích để tạo matplotlib canvas với một axes
+def create_matplotlib_canvas(parent, height=2.5):
+    fig = Figure(figsize=(6, height), dpi=100)
+    ax = fig.add_subplot(111)
+    ax.set_facecolor('#111111')  # giống giao diện tối
+    ax.tick_params(colors='white')
+    for spine in ax.spines.values():
+        spine.set_color('white')
+    canvas = FigureCanvasTkAgg(fig, master=parent)
+    widget = canvas.get_tk_widget()
+    return fig, ax, canvas, widget
+
+# Hàm vẽ mẫu waveform (placeholder)
+def plot_waveform(ax, data=None, sr=44100):
+    ax.clear()
+    if data is None:
+        duration =120
+        sampling_rate= 44100
+        t = np.linspace(0, duration, duration*sampling_rate,endpoint= False)
+        data = util.Generate_white_audio(duration,sampling_rate)
+    x = np.linspace(0, len(data)/sr, len(data))
+    ax.plot(x, data, color='#ff4040')
+    ax.set_ylim(-1, 1)
+    ax.set_xlabel("time [s]")
+    ax.set_ylabel("Normalized Amplitude")
+    ax.grid(False)
+    ax.set_facecolor('#111111')
+    ax.tick_params(colors='white')
+    for spine in ax.spines.values():
+        spine.set_color('white')
+
+# Hàm vẽ mẫu spectrogram (placeholder)
+def plot_spectrogram(ax, sr=44100):
+    ax.clear()
+    # tạo dữ liệu giả cho spectrogram
+    S = np.abs(np.random.randn(256, 256))
+    im = ax.imshow(20*np.log10(S + 1e-6), origin='lower', aspect='auto')
+    ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_facecolor('#111111')
+    ax.tick_params(colors='white')
+    for spine in ax.spines.values():
+        spine.set_color('white')
+
+def make_chart_block(parent):
+    block = {}
+    # waveform (top)
+    wf_frame = tk.Frame(parent)
+    wf_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    fig_wf, ax_wf, canvas_wf, widget_wf = create_matplotlib_canvas(wf_frame, height=1.6)
+    widget_wf.pack(fill=tk.BOTH, expand=True)
+    plot_waveform(ax_wf)
+    canvas_wf.draw()
+
+    # spectrogram (middle)
+    spec_frame = tk.Frame(parent, height=150)
+    spec_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=False, pady=6)
+    fig_spec, ax_spec, canvas_spec, widget_spec = create_matplotlib_canvas(spec_frame, height=1.2)
+    widget_spec.pack(fill=tk.BOTH, expand=True)
+    plot_spectrogram(ax_spec)
+    canvas_spec.draw()
+
+    # player frame (bottom)
+    player_frame = tk.Frame(parent)
+    player_frame.pack(side=tk.TOP, fill=tk.X, pady=(6,0))
+
+    # Time labels + slider
+    time_left = tk.Label(player_frame, text="0:00")
+    time_left.pack(side=tk.LEFT, padx=4)
+    seek = ttk.Scale(player_frame, from_=0, to=100, orient=tk.HORIZONTAL)
+    seek.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+    time_right = tk.Label(player_frame, text="0:02")
+    time_right.pack(side=tk.LEFT, padx=4)
+
+    # Playback buttons
+    btns = tk.Frame(parent)
+    btns.pack(side=tk.TOP, pady=4)
+    prev_btn = tk.Button(btns, text="⏮", width=3)
+    prev_btn.pack(side=tk.LEFT, padx=2)
+    play_btn = tk.Button(btns, text="▶", width=3, command=lambda: control.handle_play(player))
+    play_btn.pack(side=tk.LEFT, padx=2)
+    pause_btn = tk.Button(btns, text="⏸", width=3, command=lambda: control.handle_pause(player))
+    pause_btn.pack(side=tk.LEFT, padx=2)
+    stop_btn = tk.Button(btns, text="⏹", width=3, command=lambda: control.handle_stop(player))
+    stop_btn.pack(side=tk.LEFT, padx=2)
+    next_btn = tk.Button(btns, text="⏭", width=3)
+    next_btn.pack(side=tk.LEFT, padx=2)
+
+    # speed combobox
+    speed_label = tk.Label(btns, text="x")
+    speed_label.pack(side=tk.LEFT, padx=(10,0))
+    speed_combo = ttk.Combobox(btns, values=["0.5","0.75","1.0","1.25","1.5","2.0"], width=4)
+    speed_combo.set("1.0")
+    speed_combo.pack(side=tk.LEFT, padx=2)
+
+    # trả về các widget để ta có thể cập nhật sau
+    block['fig_wf'] = fig_wf            # Figure của waveform
+    block['ax_wf'] = ax_wf              # Axes của waveform (để vẽ lại)
+    block['canvas_wf'] = canvas_wf      # Canvas để .draw() lại khi cần
+
+    block['fig_spec'] = fig_spec        # Figure của spectrogram
+    block['ax_spec'] = ax_spec          # Axes của spectrogram
+    block['canvas_spec'] = canvas_spec  # Canvas của spectrogram
+
+    block['seek'] = seek                # Thanh seek thời gian
+    block['time_left'] = time_left      # Nhãn thời gian bên trái (ví dụ: "0:00")
+    block['time_right'] = time_right    # Nhãn thời gian bên phải (ví dụ: "1:45")
+    return block
+
+left_block = make_chart_block(left_chart_container)
+right_block = make_chart_block(right_chart_container)
 
 # Equalizer frame (8 thanh)
 band_frame = tk.Frame(equalizer_frame)
