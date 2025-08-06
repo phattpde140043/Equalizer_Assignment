@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog
-
+from audio_player import AudioPlayer
 
 # Tạo Cửa sổ chính
 root = tk.Tk()
