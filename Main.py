@@ -50,32 +50,9 @@ right_chart_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(4,0))
 def create_matplotlib_canvas(parent, height=2.5):
     fig = Figure(figsize=(6, height), dpi=100)
     ax = fig.add_subplot(111)
-    ax.set_facecolor('#111111')  # giống giao diện tối
-    ax.tick_params(colors='white')
-    for spine in ax.spines.values():
-        spine.set_color('white')
     canvas = FigureCanvasTkAgg(fig, master=parent)
     widget = canvas.get_tk_widget()
     return fig, ax, canvas, widget
-
-# Hàm vẽ mẫu waveform (placeholder)
-def plot_waveform(ax, data=None, sr=44100):
-    ax.clear()
-    if data is None:
-        duration =120
-        sampling_rate= 44100
-        t = np.linspace(0, duration, duration*sampling_rate,endpoint= False)
-        data = util.Generate_white_audio(duration,sampling_rate)
-    x = np.linspace(0, len(data)/sr, len(data))
-    ax.plot(x, data, color='#ff4040')
-    ax.set_ylim(-1, 1)
-    ax.set_xlabel("time [s]")
-    ax.set_ylabel("Normalized Amplitude")
-    ax.grid(False)
-    ax.set_facecolor('#111111')
-    ax.tick_params(colors='white')
-    for spine in ax.spines.values():
-        spine.set_color('white')
 
 # Hàm vẽ mẫu spectrogram (placeholder)
 def plot_spectrogram(ax, sr=44100):
@@ -97,7 +74,7 @@ def make_chart_block(parent):
     wf_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
     fig_wf, ax_wf, canvas_wf, widget_wf = create_matplotlib_canvas(wf_frame, height=1.6)
     widget_wf.pack(fill=tk.BOTH, expand=True)
-    plot_waveform(ax_wf)
+    control.plot_waveform(ax_wf,player=player)
     canvas_wf.draw()
 
     # spectrogram (middle)
@@ -117,7 +94,7 @@ def make_chart_block(parent):
     time_left.pack(side=tk.LEFT, padx=4)
     seek = ttk.Scale(player_frame, from_=0, to=100, orient=tk.HORIZONTAL)
     seek.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-    time_right = tk.Label(player_frame, text="0:02")
+    time_right = tk.Label(player_frame, text="0:00")
     time_right.pack(side=tk.LEFT, padx=4)
 
     # Playback buttons
@@ -153,6 +130,7 @@ def make_chart_block(parent):
     block['seek'] = seek                # Thanh seek thời gian
     block['time_left'] = time_left      # Nhãn thời gian bên trái (ví dụ: "0:00")
     block['time_right'] = time_right    # Nhãn thời gian bên phải (ví dụ: "1:45")
+    block['waveform_hash'] = None
     return block
 
 left_block = make_chart_block(left_chart_container)
@@ -193,4 +171,24 @@ footer.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 btn_quit = tk.Button(footer, text="Đóng ứng dụng",command=lambda: control.handle_quit(root) )
 btn_quit.pack()
 
+def periodic_update():
+    control.update_seek_bar(player, left_block)
+    control.update_seek_bar(player, right_block)
+
+    # === Cập nhật waveform nếu audio_data mới ==
+    if player.get_Data() is not None:
+        current_id = util.hash_audio_data(player.get_Data())
+        if left_block.get('waveform_hash') != current_id:
+            control.plot_waveform(left_block.get('ax_wf'),player)
+            left_block['waveform_hash'] = current_id
+            left_block.get('canvas_wf').draw()
+        
+    
+    # Gọi lại chính nó sau 100ms
+    root.after(100, periodic_update)
+
+# Bắt đầu vòng lặp
+periodic_update()
+
 root.mainloop()
+

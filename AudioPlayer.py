@@ -19,6 +19,23 @@ class AudioPlayer:
         self.position = 0
         print(f"Đã load: {filepath} - {len(self.audio_data)} samples")
 
+    def get_duration(self):
+        if self.audio_data is not None and self.sample_rate:
+            return len(self.audio_data) / self.sample_rate
+        return 0
+    
+    def get_Data(self):
+        return self.audio_data 
+    
+    def get_Sampling_rate(self):
+        return self.sample_rate
+
+    def get_current_time(self):
+        if self.sample_rate:
+            return self.position / self.sample_rate
+        return 0
+
+
     def callback(self, outdata, frames, time_info, status):
         with self.lock:
             if self.audio_data is None or self.is_paused:
@@ -80,3 +97,14 @@ class AudioPlayer:
 
     def get_current_time(self):
         return self.position / self.sample_rate if self.sample_rate else 0
+    
+    def clear(self):
+        self.audio_data = None       
+        self.sample_rate = None      
+        self.stream = None           
+        self.is_playing = False
+        self.is_paused = False
+        self.position = 0            
+        self.lock = threading.Lock() 
+
+
