@@ -11,7 +11,7 @@ import numpy as np
 # Tạo Cửa sổ chính
 root = tk.Tk()
 root.title("Giao diện chính")
-root.geometry("1200x900")       # Kích thước ban đầu
+root.geometry("1200x1000")       # Kích thước ban đầu
 root.minsize(400, 300)         # Kích thước tối thiểu: không thể nhỏ hơn
 
 # === Tạo đối tượng AudioPlayer ===
@@ -54,35 +54,24 @@ def create_matplotlib_canvas(parent, height=2.5):
     widget = canvas.get_tk_widget()
     return fig, ax, canvas, widget
 
-# Hàm vẽ mẫu spectrogram (placeholder)
-def plot_spectrogram(ax, sr=44100):
-    ax.clear()
-    # tạo dữ liệu giả cho spectrogram
-    S = np.abs(np.random.randn(256, 256))
-    im = ax.imshow(20*np.log10(S + 1e-6), origin='lower', aspect='auto')
-    ax.set_yticks([])
-    ax.set_xticks([])
-    ax.set_facecolor('#111111')
-    ax.tick_params(colors='white')
-    for spine in ax.spines.values():
-        spine.set_color('white')
+
 
 def make_chart_block(parent):
     block = {}
     # waveform (top)
     wf_frame = tk.Frame(parent)
     wf_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-    fig_wf, ax_wf, canvas_wf, widget_wf = create_matplotlib_canvas(wf_frame, height=1.6)
+    fig_wf, ax_wf, canvas_wf, widget_wf = create_matplotlib_canvas(wf_frame, height=1.2)
     widget_wf.pack(fill=tk.BOTH, expand=True)
     control.plot_waveform(ax_wf,player=player)
     canvas_wf.draw()
 
     # spectrogram (middle)
-    spec_frame = tk.Frame(parent, height=150)
+    spec_frame = tk.Frame(parent)
     spec_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=False, pady=6)
-    fig_spec, ax_spec, canvas_spec, widget_spec = create_matplotlib_canvas(spec_frame, height=1.2)
+    fig_spec, ax_spec, canvas_spec, widget_spec = create_matplotlib_canvas(spec_frame, height=1.6)
     widget_spec.pack(fill=tk.BOTH, expand=True)
-    plot_spectrogram(ax_spec)
+    control.plot_spectrogram(ax_spec,player)
     canvas_spec.draw()
 
     # player frame (bottom)
@@ -94,6 +83,7 @@ def make_chart_block(parent):
     time_left.pack(side=tk.LEFT, padx=4)
     seek = ttk.Scale(player_frame, from_=0, to=100, orient=tk.HORIZONTAL)
     seek.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+
     time_right = tk.Label(player_frame, text="0:00")
     time_right.pack(side=tk.LEFT, padx=4)
 
@@ -131,9 +121,12 @@ def make_chart_block(parent):
     block['time_left'] = time_left      # Nhãn thời gian bên trái (ví dụ: "0:00")
     block['time_right'] = time_right    # Nhãn thời gian bên phải (ví dụ: "1:45")
     block['waveform_hash'] = None
+    block['isSeeking'] = False
     return block
 
 left_block = make_chart_block(left_chart_container)
+left_block['seek'].bind("<ButtonRelease-1>", lambda event: control.onSeek(event, left_block, player))
+left_block['seek'].bind("<Button-1>", lambda event: control.onSeekStart(event, left_block))
 right_block = make_chart_block(right_chart_container)
 
 # Equalizer frame (8 thanh)
@@ -173,19 +166,24 @@ btn_quit.pack()
 
 def periodic_update():
     control.update_seek_bar(player, left_block)
-    control.update_seek_bar(player, right_block)
+    #control.update_seek_bar(player, right_block)
 
     # === Cập nhật waveform nếu audio_data mới ==
     if player.get_Data() is not None:
         current_id = util.hash_audio_data(player.get_Data())
         if left_block.get('waveform_hash') != current_id:
             control.plot_waveform(left_block.get('ax_wf'),player)
+            control.plot_spectrogram(left_block['ax_spec'],player)
             left_block['waveform_hash'] = current_id
             left_block.get('canvas_wf').draw()
+            left_block.get('canvas_spec').draw()
+    
+    if player.is_finised :
+        player.stop()
         
     
-    # Gọi lại chính nó sau 100ms
-    root.after(100, periodic_update)
+    # Gọi lại chính nó sau 1000ms
+    root.after(1000, periodic_update)
 
 # Bắt đầu vòng lặp
 periodic_update()
