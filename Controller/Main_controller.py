@@ -12,6 +12,7 @@ def handle_upload(player, root):
         player.load_file(filepath)
 
 def handle_play(player):
+    print("press_ play")
     player.play()
 
 def handle_pause(player):
@@ -34,9 +35,12 @@ def update_seek_bar(player, block):
     total_duration = player.get_duration()
     
     # Cập nhật thanh seek (giá trị phần trăm)
-    if total_duration > 0:
+    if total_duration > 0 and block['isSeeking'] is not True:
         percent = (current_time / total_duration) * 100
-        block['seek'].set(percent)
+        pre_value = block['seek'].get()
+        if pre_value != percent:
+            #print(percent)
+            block['seek'].set(percent)
     
     # Cập nhật nhãn thời gian
     block['time_left'].config(text=util.seconds_to_timestamp(current_time))
@@ -64,3 +68,41 @@ def plot_waveform(ax, player, sr=44100):
     ax.set_xlabel("time [s]")
     ax.set_ylabel("Normalized Amplitude")
     ax.grid(False)
+
+def onSeek(event, seek, player):
+    value = seek.get('seek').get()
+    #print("Slider value:", value)
+    player.seek_to_percent(value)
+    #print(player.get_current_time())
+    seek['isSeeking']= False
+
+def onSeekStart(event, seek):
+    seek['isSeeking']= True
+
+# Hàm vẽ mẫu spectrogram (placeholder)
+def plot_spectrogram(ax,player):
+    ax.clear()
+
+    if player.get_Data() is None:
+        duration =120
+        sr= 44100
+        data = util.Generate_white_audio(duration,sr)
+    else:
+        data = player.get_Data()
+        sr = player.get_Sampling_rate()
+
+    # tạo dữ liệu giả cho spectrogram
+    # Vẽ spectrogram
+    Pxx, freqs, bins, im = ax.specgram(
+        data,
+        NFFT=1024,        # Số điểm FFT
+        Fs=sr,            # Tần số lấy mẫu
+        noverlap=512,     # Số điểm chồng lấn giữa các frame
+        cmap='inferno'    # Bảng màu
+    )
+
+    # Cấu hình hiển thị
+    ax.set_xlabel("Thời gian (s)")
+    ax.set_ylabel("Tần số (Hz)")
+    ax.set_title("Spectrogram")
+    ax.set_ylim(0, sr / 2)  # Giới hạn hiển thị tới Nyquist freq
