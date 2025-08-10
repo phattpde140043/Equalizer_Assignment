@@ -12,7 +12,6 @@ def handle_upload(player, root):
         player.load_file(filepath)
 
 def handle_play(player):
-    print("press_ play")
     player.play()
 
 def handle_pause(player):

@@ -90,17 +90,14 @@ def make_chart_block(parent):
     # Playback buttons
     btns = tk.Frame(parent)
     btns.pack(side=tk.TOP, pady=4)
-    prev_btn = tk.Button(btns, text="⏮", width=3)
-    prev_btn.pack(side=tk.LEFT, padx=2)
-    play_btn = tk.Button(btns, text="▶", width=3, command=lambda: control.handle_play(player))
-    play_btn.pack(side=tk.LEFT, padx=2)
-    pause_btn = tk.Button(btns, text="⏸", width=3, command=lambda: control.handle_pause(player))
-    pause_btn.pack(side=tk.LEFT, padx=2)
-    stop_btn = tk.Button(btns, text="⏹", width=3, command=lambda: control.handle_stop(player))
-    stop_btn.pack(side=tk.LEFT, padx=2)
-    next_btn = tk.Button(btns, text="⏭", width=3)
-    next_btn.pack(side=tk.LEFT, padx=2)
 
+    play_btn = tk.Button(btns, text="▶", width=3)
+    play_btn.pack(side=tk.LEFT, padx=2)
+    pause_btn = tk.Button(btns, text="⏸", width=3)
+    pause_btn.pack(side=tk.LEFT, padx=2)
+    stop_btn = tk.Button(btns, text="⏹", width=3)
+    stop_btn.pack(side=tk.LEFT, padx=2)
+  
     # speed combobox
     speed_label = tk.Label(btns, text="x")
     speed_label.pack(side=tk.LEFT, padx=(10,0))
@@ -117,6 +114,10 @@ def make_chart_block(parent):
     block['ax_spec'] = ax_spec          # Axes của spectrogram
     block['canvas_spec'] = canvas_spec  # Canvas của spectrogram
 
+    block['play_btn']= play_btn
+    block['pause_btn']= pause_btn
+    block['stop_btn']= stop_btn
+
     block['seek'] = seek                # Thanh seek thời gian
     block['time_left'] = time_left      # Nhãn thời gian bên trái (ví dụ: "0:00")
     block['time_right'] = time_right    # Nhãn thời gian bên phải (ví dụ: "1:45")
@@ -127,6 +128,9 @@ def make_chart_block(parent):
 left_block = make_chart_block(left_chart_container)
 left_block['seek'].bind("<ButtonRelease-1>", lambda event: control.onSeek(event, left_block, player))
 left_block['seek'].bind("<Button-1>", lambda event: control.onSeekStart(event, left_block))
+left_block['play_btn'].config(command=lambda: control.handle_play(player))
+left_block['pause_btn'].config(command=lambda: control.handle_pause(player))
+left_block['stop_btn'].config(command=lambda: control.handle_stop(player))
 right_block = make_chart_block(right_chart_container)
 
 # Equalizer frame (8 thanh)
