@@ -7,6 +7,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import common.utils as util
 import numpy as np
+from common.utils import FREQS as freqs,BAND_NAME as band_names
 
 # Tạo Cửa sổ chính
 root = tk.Tk()
@@ -27,6 +28,9 @@ btn_show.pack(side=tk.LEFT, padx=10)
 
 btn_upload = tk.Button(control_frame, text="Upload file audio", command = lambda: control.handle_upload(player,root))
 btn_upload.pack(side=tk.LEFT, padx=10)
+
+btn_quit = tk.Button(control_frame, text="Đóng ứng dụng",command=lambda: control.handle_quit(root) )
+btn_quit.pack(side=tk.RIGHT, padx=10)
 
 # --- Main frame chính giữa control_frame và footer ---
 main_frame = tk.Frame(root)
@@ -90,17 +94,14 @@ def make_chart_block(parent):
     # Playback buttons
     btns = tk.Frame(parent)
     btns.pack(side=tk.TOP, pady=4)
-    prev_btn = tk.Button(btns, text="⏮", width=3)
-    prev_btn.pack(side=tk.LEFT, padx=2)
-    play_btn = tk.Button(btns, text="▶", width=3, command=lambda: control.handle_play(player))
-    play_btn.pack(side=tk.LEFT, padx=2)
-    pause_btn = tk.Button(btns, text="⏸", width=3, command=lambda: control.handle_pause(player))
-    pause_btn.pack(side=tk.LEFT, padx=2)
-    stop_btn = tk.Button(btns, text="⏹", width=3, command=lambda: control.handle_stop(player))
-    stop_btn.pack(side=tk.LEFT, padx=2)
-    next_btn = tk.Button(btns, text="⏭", width=3)
-    next_btn.pack(side=tk.LEFT, padx=2)
 
+    play_btn = tk.Button(btns, text="▶", width=3)
+    play_btn.pack(side=tk.LEFT, padx=2)
+    pause_btn = tk.Button(btns, text="⏸", width=3)
+    pause_btn.pack(side=tk.LEFT, padx=2)
+    stop_btn = tk.Button(btns, text="⏹", width=3)
+    stop_btn.pack(side=tk.LEFT, padx=2)
+  
     # speed combobox
     speed_label = tk.Label(btns, text="x")
     speed_label.pack(side=tk.LEFT, padx=(10,0))
@@ -117,6 +118,10 @@ def make_chart_block(parent):
     block['ax_spec'] = ax_spec          # Axes của spectrogram
     block['canvas_spec'] = canvas_spec  # Canvas của spectrogram
 
+    block['play_btn']= play_btn
+    block['pause_btn']= pause_btn
+    block['stop_btn']= stop_btn
+
     block['seek'] = seek                # Thanh seek thời gian
     block['time_left'] = time_left      # Nhãn thời gian bên trái (ví dụ: "0:00")
     block['time_right'] = time_right    # Nhãn thời gian bên phải (ví dụ: "1:45")
@@ -127,16 +132,18 @@ def make_chart_block(parent):
 left_block = make_chart_block(left_chart_container)
 left_block['seek'].bind("<ButtonRelease-1>", lambda event: control.onSeek(event, left_block, player))
 left_block['seek'].bind("<Button-1>", lambda event: control.onSeekStart(event, left_block))
+left_block['play_btn'].config(command=lambda: control.handle_play(player))
+left_block['pause_btn'].config(command=lambda: control.handle_pause(player))
+left_block['stop_btn'].config(command=lambda: control.handle_stop(player))
 right_block = make_chart_block(right_chart_container)
 
 # Equalizer frame (8 thanh)
 band_frame = tk.Frame(equalizer_frame)
 band_frame.pack(side=tk.TOP, fill=tk.X, padx=8, pady=8)
 
-freqs = ["2.2K","4.4K","6.6K","8.8K","11K","13.2K","15.4K","17.6K"]  # ví dụ
 scales = []
 
-for i, f in enumerate(freqs):
+for i, (f,n) in enumerate(zip(freqs,band_names)):
     col = tk.Frame(band_frame)
     col.pack(side=tk.LEFT, expand=True, fill=tk.Y, padx=6)
 
@@ -150,19 +157,20 @@ for i, f in enumerate(freqs):
     db_label.pack(side=tk.TOP, pady=(4,0))
 
     # freq label
-    freq_label = tk.Label(col, text=f)
+    freq_label = tk.Label(col, text=f"{f} Hz")
     freq_label.pack(side=tk.TOP, pady=(2,0))
-    s.config(command= lambda: control.make_callback(db_label))
 
+    # name label
+    name_label = tk.Label(col, text=n)
+    name_label.pack(side=tk.TOP, pady=(2,0))
+
+
+    #s.config(command=control.make_callback(db_label,i,freqs,scales))
+    # Gán sự kiện khi nhả chuột
+    s.bind("<ButtonRelease-1>", lambda e, freq=f, lbl=db_label: control.on_scale_release(e, freq, lbl,freqs,scales))
     scales.append(s)
 
 
-# Footer chứa nút thoát
-footer = tk.Frame(root)
-footer.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
-
-btn_quit = tk.Button(footer, text="Đóng ứng dụng",command=lambda: control.handle_quit(root) )
-btn_quit.pack()
 
 def periodic_update():
     control.update_seek_bar(player, left_block)

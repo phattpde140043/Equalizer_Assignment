@@ -52,8 +52,6 @@ class AudioPlayer:
         with self.lock:
             if self.audio_data is None or self.is_paused:
                 outdata[:] = np.zeros((frames, 1))
-                print("is Paused")
-                raise sd.CallbackStop()
                 return
 
             end = self.position + frames
@@ -73,7 +71,6 @@ class AudioPlayer:
             self.position += frames
 
     def play(self):
-        print("nhận event play")
         if self.audio_data is None:
             print("Chưa có dữ liệu để phát")
             return
@@ -85,15 +82,11 @@ class AudioPlayer:
         self.is_playing = True
         self.is_paused = False
         if self.stream is not None :
-            print('stream not null')
             self.stream.close()
-            print('close done')
             self.stream.stop()
-            print('stop done')
             self.stream = None
             
         try:
-            print('play')
             self.stream = sd.OutputStream(
             samplerate=self.sample_rate,
             channels=1,

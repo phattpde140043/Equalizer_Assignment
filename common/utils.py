@@ -1,6 +1,11 @@
 import numpy as np
 import hashlib
 
+FREQS = [31.25,62.5,125,250,500,1000,2000,4000,8000,16000]
+BAND_NAME = ["Sub-bass","Bass","Low","Low-mid","Mid","Upper mid","Presence","Brilliance","High","Air"]  
+
+
+
 # Hàm chuyển đổi milliseconds thành chuỗi định dạng thời gian
 def time_stamp(ms):
     hours, remainder = divmod(ms, 3_600_000)
