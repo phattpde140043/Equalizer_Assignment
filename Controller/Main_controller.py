@@ -24,8 +24,13 @@ def handle_quit(root):
     root.destroy()
 
 # update label mỗi khi thay đổi giá trị của equalizer
-    def make_callback(lbl):
-        return lambda v: lbl.config(text=f"{float(v):.1f} dB")
+def on_scale_release(event, f, lbl,freqs,scales):
+    v = float(event.widget.get())
+    lbl.config(text=f"{v:.1f} dB")
+
+    # Tạo dict tổng hợp giá trị của tất cả các scale
+    values = {freqs[i]: float(s.get()) for i, s in enumerate(scales)}
+    print(values)  # In dict tổng hợp khi nhả chuột
 
 # update label của thời gian
 def update_seek_bar(player, block):

@@ -28,6 +28,9 @@ btn_show.pack(side=tk.LEFT, padx=10)
 btn_upload = tk.Button(control_frame, text="Upload file audio", command = lambda: control.handle_upload(player,root))
 btn_upload.pack(side=tk.LEFT, padx=10)
 
+btn_quit = tk.Button(control_frame, text="Đóng ứng dụng",command=lambda: control.handle_quit(root) )
+btn_quit.pack(side=tk.RIGHT, padx=10)
+
 # --- Main frame chính giữa control_frame và footer ---
 main_frame = tk.Frame(root)
 main_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
@@ -137,10 +140,11 @@ right_block = make_chart_block(right_chart_container)
 band_frame = tk.Frame(equalizer_frame)
 band_frame.pack(side=tk.TOP, fill=tk.X, padx=8, pady=8)
 
-freqs = ["2.2K","4.4K","6.6K","8.8K","11K","13.2K","15.4K","17.6K"]  # ví dụ
+freqs = ["31 Hz","62 Hz","125 Hz","250 Hz","500 Hz","1 kHz","2 kHz","4 kHz","8 kHz","16 kHz"]  # ví dụ
+band_names = ["Sub-bass","Bass","Low","Low-mid","Mid","Upper mid","Presence","Brilliance","High","Air"]  # ví dụ
 scales = []
 
-for i, f in enumerate(freqs):
+for i, (f,n) in enumerate(zip(freqs,band_names)):
     col = tk.Frame(band_frame)
     col.pack(side=tk.LEFT, expand=True, fill=tk.Y, padx=6)
 
@@ -156,17 +160,18 @@ for i, f in enumerate(freqs):
     # freq label
     freq_label = tk.Label(col, text=f)
     freq_label.pack(side=tk.TOP, pady=(2,0))
-    s.config(command= lambda: control.make_callback(db_label))
 
+    # name label
+    name_label = tk.Label(col, text=n)
+    name_label.pack(side=tk.TOP, pady=(2,0))
+
+
+    #s.config(command=control.make_callback(db_label,i,freqs,scales))
+    # Gán sự kiện khi nhả chuột
+    s.bind("<ButtonRelease-1>", lambda e, freq=f, lbl=db_label: control.on_scale_release(e, freq, lbl,freqs,scales))
     scales.append(s)
 
 
-# Footer chứa nút thoát
-footer = tk.Frame(root)
-footer.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
-
-btn_quit = tk.Button(footer, text="Đóng ứng dụng",command=lambda: control.handle_quit(root) )
-btn_quit.pack()
 
 def periodic_update():
     control.update_seek_bar(player, left_block)
