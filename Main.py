@@ -7,6 +7,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import common.utils as util
 import numpy as np
+from common.utils import FREQS as freqs,BAND_NAME as band_names
 
 # Tạo Cửa sổ chính
 root = tk.Tk()
@@ -140,8 +141,6 @@ right_block = make_chart_block(right_chart_container)
 band_frame = tk.Frame(equalizer_frame)
 band_frame.pack(side=tk.TOP, fill=tk.X, padx=8, pady=8)
 
-freqs = ["31 Hz","62 Hz","125 Hz","250 Hz","500 Hz","1 kHz","2 kHz","4 kHz","8 kHz","16 kHz"]  # ví dụ
-band_names = ["Sub-bass","Bass","Low","Low-mid","Mid","Upper mid","Presence","Brilliance","High","Air"]  # ví dụ
 scales = []
 
 for i, (f,n) in enumerate(zip(freqs,band_names)):
@@ -158,7 +157,7 @@ for i, (f,n) in enumerate(zip(freqs,band_names)):
     db_label.pack(side=tk.TOP, pady=(4,0))
 
     # freq label
-    freq_label = tk.Label(col, text=f)
+    freq_label = tk.Label(col, text=f"{f} Hz")
     freq_label.pack(side=tk.TOP, pady=(2,0))
 
     # name label

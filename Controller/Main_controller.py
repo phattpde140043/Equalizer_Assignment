@@ -1,7 +1,13 @@
 from tkinter import filedialog
-import common.utils as util 
+
+from common import utils
+from common.utils import FREQS
+
 import numpy as np
 import matplotlib
+
+import math
+import scipy.signal as signal
 
 def handle_upload(player, root):
     filepath = filedialog.askopenfilename(
@@ -47,8 +53,8 @@ def update_seek_bar(player, block):
             block['seek'].set(percent)
     
     # Cập nhật nhãn thời gian
-    block['time_left'].config(text=util.seconds_to_timestamp(current_time))
-    block['time_right'].config(text=util.seconds_to_timestamp(total_duration))
+    block['time_left'].config(text=utils.seconds_to_timestamp(current_time))
+    block['time_right'].config(text=utils.seconds_to_timestamp(total_duration))
 
 # Hàm vẽ mẫu waveform (placeholder)
 def plot_waveform(ax, player, sr=44100):
@@ -58,7 +64,7 @@ def plot_waveform(ax, player, sr=44100):
         duration =120
         sampling_rate= 44100
         t = np.linspace(0, duration, duration*sampling_rate,endpoint= False)
-        data = util.Generate_white_audio(duration,sampling_rate)
+        data = utils.Generate_white_audio(duration,sampling_rate)
     
     else:
         data = player.get_Data()
@@ -90,7 +96,7 @@ def plot_spectrogram(ax,player):
     if player.get_Data() is None:
         duration =120
         sr= 44100
-        data = util.Generate_white_audio(duration,sr)
+        data = utils.Generate_white_audio(duration,sr)
     else:
         data = player.get_Data()
         sr = player.get_Sampling_rate()
@@ -110,3 +116,24 @@ def plot_spectrogram(ax,player):
     ax.set_ylabel("Tần số (Hz)")
     ax.set_title("Spectrogram")
     ax.set_ylim(0, sr / 2)  # Giới hạn hiển thị tới Nyquist freq
+
+def autoEQ(player):
+    if player.get_Data() is not None:
+        data = player.get_Data()
+        sr = player.get_Sampling_rate()
+    
+    # === 3. Tính biên của từng band (±1/√2 octave) ===
+    bands = []
+    for f in freqs:
+        low = f / math.sqrt(2)
+        high = f * math.sqrt(2)
+        bands.append((low, high))
+
+
+
+# === Hàm tạo bộ lọc band-pass ===
+def bandpass_filter(data, lowcut, highcut, fs, order=4):
+    sos = signal.butter(order, [lowcut, highcut], btype='band', fs=fs, output='sos')
+    return signal.sosfilt(sos, data)
+
+
