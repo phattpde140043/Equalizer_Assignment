@@ -167,7 +167,7 @@ for i, (f,n) in enumerate(zip(freqs,band_names)):
 
     #s.config(command=control.make_callback(db_label,i,freqs,scales))
     # Gán sự kiện khi nhả chuột
-    s.bind("<ButtonRelease-1>", lambda e, freq=f, lbl=db_label: control.on_scale_release(e, freq, lbl,freqs,scales))
+    s.bind("<ButtonRelease-1>", lambda e, freq=f, lbl=db_label: control.on_scale_release(e, freq, lbl,scales,player))
     scales.append(s)
 
 
