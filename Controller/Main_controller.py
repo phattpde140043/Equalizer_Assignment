@@ -1,7 +1,7 @@
 from tkinter import filedialog
 
 from common import utils
-from common.utils import FREQS
+from common.utils import FREQS as freqs
 
 import numpy as np
 import matplotlib
@@ -30,13 +30,22 @@ def handle_quit(root):
     root.destroy()
 
 # update label mỗi khi thay đổi giá trị của equalizer
-def on_scale_release(event, f, lbl,freqs,scales):
+def on_scale_release(event, f, lbl,scales,player):
     v = float(event.widget.get())
     lbl.config(text=f"{v:.1f} dB")
 
     # Tạo dict tổng hợp giá trị của tất cả các scale
-    values = {freqs[i]: float(s.get()) for i, s in enumerate(scales)}
+    values = [s.get() for s in scales]
     print(values)  # In dict tổng hợp khi nhả chuột
+
+    if player.get_Data() is None:
+        return
+    
+    data = player.get_Data()
+    sr = player.get_Sampling_rate()
+
+    equalizer_output = apply_eq(data,sr,values)
+    print(equalizer_output)
 
 # update label của thời gian
 def update_seek_bar(player, block):
@@ -81,9 +90,7 @@ def plot_waveform(ax, player, sr=44100):
 
 def onSeek(event, seek, player):
     value = seek.get('seek').get()
-    #print("Slider value:", value)
     player.seek_to_percent(value)
-    #print(player.get_current_time())
     seek['isSeeking']= False
 
 def onSeekStart(event, seek):
@@ -117,23 +124,42 @@ def plot_spectrogram(ax,player):
     ax.set_title("Spectrogram")
     ax.set_ylim(0, sr / 2)  # Giới hạn hiển thị tới Nyquist freq
 
-def autoEQ(player):
-    if player.get_Data() is not None:
-        data = player.get_Data()
-        sr = player.get_Sampling_rate()
+# Hàm helper tạo bộ lọc bandpass dạng sos
+def bandpass_sos(lowcut, highcut, fs, order=4):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
+    return sos
+
+
+def apply_eq(data, sampling_rate, gains_db):    
+    # Khởi tạo tín hiệu output bằng mảng 0
+    output = np.zeros_like(data, dtype=np.float64)
     
-    # === 3. Tính biên của từng band (±1/√2 octave) ===
-    bands = []
-    for f in freqs:
-        low = f / math.sqrt(2)
-        high = f * math.sqrt(2)
-        bands.append((low, high))
-
-
-
-# === Hàm tạo bộ lọc band-pass ===
-def bandpass_filter(data, lowcut, highcut, fs, order=4):
-    sos = signal.butter(order, [lowcut, highcut], btype='band', fs=fs, output='sos')
-    return signal.sosfilt(sos, data)
-
-
+    # Xử lý từng band
+    for i, (f_c, gain_db) in enumerate(zip(freqs, gains_db)):
+        # Tính biên band ±1/√2 octave quanh f_c
+        low = f_c / np.sqrt(2)
+        high = f_c * np.sqrt(2)
+        if high >= sampling_rate / 2:
+            high = sampling_rate / 2 - 1
+        
+        # Tạo filter bandpass
+        sos = bandpass_sos(low, high, sampling_rate)
+        
+        # Lọc tín hiệu
+        filtered = signal.sosfilt(sos,data)
+        
+        # Chuyển gain dB sang hệ số tuyến tính
+        gain_linear = 10**(gain_db / 20)
+        
+        # Cộng tín hiệu đã filter theo gain
+        output += filtered * gain_linear
+    
+    # Chuẩn hóa output tránh vượt quá biên độ
+    max_val = np.max(np.abs(output))
+    if max_val > 1:
+        output = output / max_val
+    
+    return output
