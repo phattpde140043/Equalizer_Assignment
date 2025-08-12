@@ -17,6 +17,7 @@ root.minsize(400, 300)         # Kích thước tối thiểu: không thể nh�
 
 # === Tạo đối tượng AudioPlayer ===
 player = AudioPlayer()
+output_player = AudioPlayer()
 
 
 # === Frame chứa các nút điều khiển ===
@@ -26,7 +27,7 @@ control_frame.pack(pady=10)
 btn_show = tk.Button(control_frame, text="Bắt đầu ghi âm")
 btn_show.pack(side=tk.LEFT, padx=10)
 
-btn_upload = tk.Button(control_frame, text="Upload file audio", command = lambda: control.handle_upload(player,root))
+btn_upload = tk.Button(control_frame, text="Upload file audio", command = lambda: control.handle_upload(player))
 btn_upload.pack(side=tk.LEFT, padx=10)
 
 btn_quit = tk.Button(control_frame, text="Đóng ứng dụng",command=lambda: control.handle_quit(root) )
@@ -136,6 +137,11 @@ left_block['play_btn'].config(command=lambda: control.handle_play(player))
 left_block['pause_btn'].config(command=lambda: control.handle_pause(player))
 left_block['stop_btn'].config(command=lambda: control.handle_stop(player))
 right_block = make_chart_block(right_chart_container)
+right_block['play_btn'].config(command=lambda: control.handle_play(output_player))
+right_block['pause_btn'].config(command=lambda: control.handle_pause(output_player))
+right_block['stop_btn'].config(command=lambda: control.handle_stop(output_player))
+right_block['seek'].bind("<ButtonRelease-1>", lambda event: control.onSeek(event, right_block, output_player))
+right_block['seek'].bind("<Button-1>", lambda event: control.onSeekStart(event, right_block))
 
 # Equalizer frame (8 thanh)
 band_frame = tk.Frame(equalizer_frame)
@@ -167,27 +173,40 @@ for i, (f,n) in enumerate(zip(freqs,band_names)):
 
     #s.config(command=control.make_callback(db_label,i,freqs,scales))
     # Gán sự kiện khi nhả chuột
-    s.bind("<ButtonRelease-1>", lambda e, freq=f, lbl=db_label: control.on_scale_release(e, freq, lbl,scales,player,right_block))
+    s.bind("<ButtonRelease-1>", lambda e, freq=f, lbl=db_label: control.on_scale_release(e, freq, lbl,scales,player,output_player))
     scales.append(s)
 
 
 
 def periodic_update():
     control.update_seek_bar(player, left_block)
-    #control.update_seek_bar(player, right_block)
+    control.update_seek_bar(output_player, right_block)
 
     # === Cập nhật waveform nếu audio_data mới ==
     if player.get_Data() is not None:
-        current_id = util.hash_audio_data(player.get_Data())
-        if left_block.get('waveform_hash') != current_id:
+        current_hash = util.hash_audio_data(player.get_Data())
+        if left_block.get('waveform_hash') != current_hash:
             control.plot_waveform(left_block.get('ax_wf'),player)
             control.plot_spectrogram(left_block['ax_spec'],player)
-            left_block['waveform_hash'] = current_id
+            left_block['waveform_hash'] = current_hash
+            output_player.sample_rate = player.sample_rate
+            output_player.audio_data= player.getEqualizerData()
             left_block.get('canvas_wf').draw()
             left_block.get('canvas_spec').draw()
-            control.drawOutputChart(right_block,player)
+
+    if output_player.get_Data() is not None:
+        output_current_hash = util.hash_audio_data(output_player.get_Data())
+        if right_block.get('waveform_hash') != output_current_hash:
+            control.plot_waveform(right_block.get('ax_wf'),output_player)
+            control.plot_spectrogram(right_block['ax_spec'],output_player)
+            right_block['waveform_hash'] = output_current_hash
+            right_block.get('canvas_wf').draw()
+            right_block.get('canvas_spec').draw()
     
     if player.is_finised :
+        player.stop()
+
+    if output_player.is_finised :
         player.stop()
         
     

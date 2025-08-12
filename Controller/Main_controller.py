@@ -9,7 +9,7 @@ import matplotlib
 import math
 import scipy.signal as signal
 
-def handle_upload(player, root):
+def handle_upload(player):
     filepath = filedialog.askopenfilename(
         title="Chọn file audio",
         filetypes=[("Audio Files", "*.wav *.mp3 *.flac"), ("All files", "*.*")]
@@ -30,7 +30,7 @@ def handle_quit(root):
     root.destroy()
 
 # update label mỗi khi thay đổi giá trị của equalizer
-def on_scale_release(event, f, lbl,scales,player,chart_block):
+def on_scale_release(event, f, lbl,scales,player,output_player):
     v = float(event.widget.get())
     lbl.config(text=f"{v:.1f} dB")
 
@@ -42,7 +42,7 @@ def on_scale_release(event, f, lbl,scales,player,chart_block):
         return
     
     player.equalizer_gain= values
-    drawOutputChart(chart_block, player)
+    output_player.audio_data= player.getEqualizerData()
 
 
 
@@ -130,39 +130,3 @@ def bandpass_sos(lowcut, highcut, fs, order=4):
     high = highcut / nyq
     sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
     return sos
-
-def drawOutputChart(chart_block, player):
-    if player.get_Data() is None :
-        return 
-    
-    data = player.getEqualizerData()
-    sr = player.get_Sampling_rate()
-    x = np.linspace(0, len(data)/sr, len(data))
-    ax= chart_block['ax_wf']
-    ax.clear()
-    ax.plot(x, data, color='#ff4040')
-    ax.set_ylim(-1, 1)
-    ax.set_xlabel("time [s]")
-    ax.set_ylabel("Normalized Amplitude")
-    ax.grid(False)
-
-    spec_ax = chart_block['ax_spec']
-
-    Pxx, freqs, bins, im = spec_ax.specgram(
-        data,
-        NFFT=1024,        # Số điểm FFT
-        Fs=sr,            # Tần số lấy mẫu
-        noverlap=512,     # Số điểm chồng lấn giữa các frame
-        cmap='inferno'    # Bảng màu
-    )
-    # Cấu hình hiển thị
-    spec_ax.set_xlabel("Thời gian (s)")
-    spec_ax.set_ylabel("Tần số (Hz)")
-    spec_ax.set_title("Spectrogram")
-    spec_ax.set_ylim(0, sr / 2)  # Giới hạn hiển thị tới Nyquist freq
-
-    chart_block.get('canvas_wf').draw()
-    chart_block.get('canvas_spec').draw()
-
-    
-
