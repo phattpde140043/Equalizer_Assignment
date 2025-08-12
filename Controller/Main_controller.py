@@ -30,7 +30,7 @@ def handle_quit(root):
     root.destroy()
 
 # update label mỗi khi thay đổi giá trị của equalizer
-def on_scale_release(event, f, lbl,scales,player):
+def on_scale_release(event, f, lbl,scales,player,chart_block):
     v = float(event.widget.get())
     lbl.config(text=f"{v:.1f} dB")
 
@@ -41,11 +41,10 @@ def on_scale_release(event, f, lbl,scales,player):
     if player.get_Data() is None:
         return
     
-    data = player.get_Data()
-    sr = player.get_Sampling_rate()
+    player.equalizer_gain= values
+    drawOutputChart(chart_block, player)
 
-    equalizer_output = apply_eq(data,sr,values)
-    print(equalizer_output)
+
 
 # update label của thời gian
 def update_seek_bar(player, block):
@@ -132,34 +131,38 @@ def bandpass_sos(lowcut, highcut, fs, order=4):
     sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
     return sos
 
+def drawOutputChart(chart_block, player):
+    if player.get_Data() is None :
+        return 
+    
+    data = player.getEqualizerData()
+    sr = player.get_Sampling_rate()
+    x = np.linspace(0, len(data)/sr, len(data))
+    ax= chart_block['ax_wf']
+    ax.clear()
+    ax.plot(x, data, color='#ff4040')
+    ax.set_ylim(-1, 1)
+    ax.set_xlabel("time [s]")
+    ax.set_ylabel("Normalized Amplitude")
+    ax.grid(False)
 
-def apply_eq(data, sampling_rate, gains_db):    
-    # Khởi tạo tín hiệu output bằng mảng 0
-    output = np.zeros_like(data, dtype=np.float64)
+    spec_ax = chart_block['ax_spec']
+
+    Pxx, freqs, bins, im = spec_ax.specgram(
+        data,
+        NFFT=1024,        # Số điểm FFT
+        Fs=sr,            # Tần số lấy mẫu
+        noverlap=512,     # Số điểm chồng lấn giữa các frame
+        cmap='inferno'    # Bảng màu
+    )
+    # Cấu hình hiển thị
+    spec_ax.set_xlabel("Thời gian (s)")
+    spec_ax.set_ylabel("Tần số (Hz)")
+    spec_ax.set_title("Spectrogram")
+    spec_ax.set_ylim(0, sr / 2)  # Giới hạn hiển thị tới Nyquist freq
+
+    chart_block.get('canvas_wf').draw()
+    chart_block.get('canvas_spec').draw()
+
     
-    # Xử lý từng band
-    for i, (f_c, gain_db) in enumerate(zip(freqs, gains_db)):
-        # Tính biên band ±1/√2 octave quanh f_c
-        low = f_c / np.sqrt(2)
-        high = f_c * np.sqrt(2)
-        if high >= sampling_rate / 2:
-            high = sampling_rate / 2 - 1
-        
-        # Tạo filter bandpass
-        sos = bandpass_sos(low, high, sampling_rate)
-        
-        # Lọc tín hiệu
-        filtered = signal.sosfilt(sos,data)
-        
-        # Chuyển gain dB sang hệ số tuyến tính
-        gain_linear = 10**(gain_db / 20)
-        
-        # Cộng tín hiệu đã filter theo gain
-        output += filtered * gain_linear
-    
-    # Chuẩn hóa output tránh vượt quá biên độ
-    max_val = np.max(np.abs(output))
-    if max_val > 1:
-        output = output / max_val
-    
-    return output
+
