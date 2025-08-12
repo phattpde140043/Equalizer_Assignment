@@ -9,7 +9,7 @@ import matplotlib
 import math
 import scipy.signal as signal
 
-def handle_upload(player, root):
+def handle_upload(player):
     filepath = filedialog.askopenfilename(
         title="Chọn file audio",
         filetypes=[("Audio Files", "*.wav *.mp3 *.flac"), ("All files", "*.*")]
@@ -30,7 +30,7 @@ def handle_quit(root):
     root.destroy()
 
 # update label mỗi khi thay đổi giá trị của equalizer
-def on_scale_release(event, f, lbl,scales,player):
+def on_scale_release(event, f, lbl,scales,player,output_player):
     v = float(event.widget.get())
     lbl.config(text=f"{v:.1f} dB")
 
@@ -41,11 +41,10 @@ def on_scale_release(event, f, lbl,scales,player):
     if player.get_Data() is None:
         return
     
-    data = player.get_Data()
-    sr = player.get_Sampling_rate()
+    player.equalizer_gain= values
+    output_player.audio_data= player.getEqualizerData()
 
-    equalizer_output = apply_eq(data,sr,values)
-    print(equalizer_output)
+
 
 # update label của thời gian
 def update_seek_bar(player, block):
@@ -131,35 +130,3 @@ def bandpass_sos(lowcut, highcut, fs, order=4):
     high = highcut / nyq
     sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
     return sos
-
-
-def apply_eq(data, sampling_rate, gains_db):    
-    # Khởi tạo tín hiệu output bằng mảng 0
-    output = np.zeros_like(data, dtype=np.float64)
-    
-    # Xử lý từng band
-    for i, (f_c, gain_db) in enumerate(zip(freqs, gains_db)):
-        # Tính biên band ±1/√2 octave quanh f_c
-        low = f_c / np.sqrt(2)
-        high = f_c * np.sqrt(2)
-        if high >= sampling_rate / 2:
-            high = sampling_rate / 2 - 1
-        
-        # Tạo filter bandpass
-        sos = bandpass_sos(low, high, sampling_rate)
-        
-        # Lọc tín hiệu
-        filtered = signal.sosfilt(sos,data)
-        
-        # Chuyển gain dB sang hệ số tuyến tính
-        gain_linear = 10**(gain_db / 20)
-        
-        # Cộng tín hiệu đã filter theo gain
-        output += filtered * gain_linear
-    
-    # Chuẩn hóa output tránh vượt quá biên độ
-    max_val = np.max(np.abs(output))
-    if max_val > 1:
-        output = output / max_val
-    
-    return output
