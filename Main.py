@@ -213,6 +213,16 @@ def periodic_update():
     # Gọi lại chính nó sau 1000ms
     root.after(1000, periodic_update)
 
+# --- THÊM: trạng thái ghi & controller ---
+status_var = tk.StringVar(value="")
+status_label = tk.Label(control_frame, textvariable=status_var, fg="green")
+status_label.pack(side=tk.LEFT, padx=10)
+
+# Tạo controller và gán refs UI
+app = control.AppController(player, ui_refs={'btn_record': btn_show, 'status_var': status_var})
+
+# Gán nút "Bắt đầu ghi âm" thành toggle record
+btn_show.config(command=app.toggle_record)
 # Bắt đầu vòng lặp
 periodic_update()
 

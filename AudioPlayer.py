@@ -29,6 +29,25 @@ class AudioPlayer:
         self.FilterByBand()
         self.equalizer_gain=np.zeros(len(freqs))
 
+    #Thêm set_data và append_data
+    def set_data(self, data, sr):
+        with self.lock:
+            self.audio_data = np.asarray(data, dtype=np.float32)
+            self.sample_rate = sr
+            self.position = 0
+            self.is_finised = False
+
+    def append_data(self, chunk):
+        with self.lock:
+            if self.audio_data is None:
+                self.audio_data = np.asarray(chunk, dtype=np.float32)
+            else:
+                self.audio_data = np.concatenate(
+                    [self.audio_data, np.asarray(chunk, dtype=np.float32)],
+                    axis=0
+                )
+    #####################################
+
     def get_duration(self):
         if self.audio_data is not None and self.sample_rate:
             return len(self.audio_data) / self.sample_rate

@@ -8,6 +8,7 @@ import matplotlib
 
 import math
 import scipy.signal as signal
+from Models.RealtimeRecorder import RealtimeRecorder
 
 def handle_upload(player):
     filepath = filedialog.askopenfilename(
@@ -130,3 +131,51 @@ def bandpass_sos(lowcut, highcut, fs, order=4):
     high = highcut / nyq
     sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
     return sos
+  
+  
+class AppController:
+    def __init__(self, player, ui_refs=None):
+        self.player = player
+        self.ui = ui_refs or {}
+
+        self.recorder = RealtimeRecorder(
+            samplerate=16000,
+            channels=1,
+            blocksize=1024,   # callback nhỏ cho an toàn
+            batch_ms=240,     # xử lý ~200–300 ms như yêu cầu
+            max_wait_ms=350,
+            on_chunk=self._on_chunk,
+            on_state=self._on_state
+        )
+        self.max_seconds = 30  # giới hạn buffer ~30s để tránh phình RAM
+
+    def _on_state(self, is_recording: bool):
+        if 'status_var' in self.ui:
+            self.ui['status_var'].set("Đang ghi..." if is_recording else "Đã dừng")
+        if 'btn_record' in self.ui:
+            self.ui['btn_record'].config(
+                text="Dừng ghi" if is_recording else "Bắt đầu ghi âm"
+            )
+
+    def _on_chunk(self, chunk, sr):
+        # Ví dụ xử lý rất nhẹ theo batch: noise gate
+        rms = np.sqrt(np.mean(chunk**2) + 1e-9)
+        if rms < 0.005:
+            chunk = chunk * 0.2
+
+        if self.player.get_Data() is None:
+            self.player.set_data(chunk, sr)
+        else:
+            self.player.append_data(chunk)
+            data = self.player.get_Data()
+            max_len = int(self.max_seconds * sr)
+            if data.shape[0] > max_len:
+                self.player.set_data(data[-max_len:], sr)
+
+    def toggle_record(self):
+        if self.recorder.is_recording:
+            self.recorder.stop()
+        else:
+            # reset buffer trước khi thu mới
+            self.player.set_data(np.zeros(0, dtype=np.float32), 16000)
+            self.recorder.start()
