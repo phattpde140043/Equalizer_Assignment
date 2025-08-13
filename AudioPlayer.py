@@ -3,6 +3,8 @@ import numpy as np
 import librosa
 import threading
 import time
+from common.utils import FREQS as freqs
+import scipy.signal as signal
 
 class AudioPlayer:
     def __init__(self):
@@ -12,14 +14,20 @@ class AudioPlayer:
         self.is_playing = False
         self.is_paused = False
         self.is_finised = False
+        self.band_Audio=[]
+        self.equalizer_gain=[]
         
         self.position = 0            # Vị trí hiện tại (tính theo mẫu)
         self.lock = threading.Lock() # Dùng để đồng bộ
 
     def load_file(self, filepath):
+        if self.audio_data is not None:
+            self.clear()
         self.audio_data, self.sample_rate = librosa.load(filepath, sr=None)
         self.position = 0
         print(f"Đã load: {filepath} - {len(self.audio_data)} samples")
+        self.FilterByBand()
+        self.equalizer_gain=np.zeros(len(freqs))
 
     #Thêm set_data và append_data
     def set_data(self, data, sr):
@@ -151,5 +159,50 @@ class AudioPlayer:
         self.is_paused = False
         self.position = 0            
         self.lock = threading.Lock() 
+        self.band_Audio=[]
 
+    def FilterByBand(self):
+
+        # Xử lý từng band
+        for f_c in freqs:
+
+            # Tính biên band ±1/√2 octave quanh f_c
+            low = f_c / np.sqrt(2)
+            high = f_c * np.sqrt(2)
+            if high >= self.sample_rate / 2:
+                high = self.sample_rate / 2 - 1
+        
+            # Tạo filter bandpass
+            sos = bandpass_sos(low, high, self.sample_rate)
+
+            # Lọc tín hiệu
+            filtered = signal.sosfilt(sos,self.audio_data)
+
+            self.band_Audio.append(filtered)
+
+        
+
+
+    def getEqualizerData(self):
+        output = np.zeros_like(self.audio_data, dtype=np.float64)
+
+        for i, (band, gain) in enumerate(zip(self.band_Audio,self.equalizer_gain)) :
+            # Chuyển gain dB sang hệ số tuyến tính
+            gain_linear = 10**(gain / 20)
+            output+= band* gain_linear
+
+        # Chuẩn hóa output tránh vượt quá biên độ
+        max_val = np.max(np.abs(output))
+        if max_val > 1:
+            output = output / max_val
+
+        return output
+
+# Hàm helper tạo bộ lọc bandpass dạng sos
+def bandpass_sos(lowcut, highcut, fs, order=4):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
+    return sos
 
