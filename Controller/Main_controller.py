@@ -1,22 +1,28 @@
 from tkinter import filedialog
 
+from DL import process
 from common import utils
 from common.utils import FREQS as freqs
-
+import joblib
 import numpy as np
 import matplotlib
-
+import threading
 import math
 import scipy.signal as signal
 from Models.RealtimeRecorder import RealtimeRecorder
+from DL.process import extract_all_features
+from DL.predict import model,index_label
 
-def handle_upload(player):
+
+
+def handle_upload(player,label):
     filepath = filedialog.askopenfilename(
         title="Chọn file audio",
         filetypes=[("Audio Files", "*.wav *.mp3 *.flac"), ("All files", "*.*")]
     )
     if filepath:
         player.load_file(filepath)
+        RunPredictFunction(filepath,view_label=label)
 
 def handle_play(player):
     player.play()
@@ -131,6 +137,30 @@ def bandpass_sos(lowcut, highcut, fs, order=4):
     high = highcut / nyq
     sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
     return sos
+
+def RunPredictFunction(filepath,view_label,label="unknown", callback=None):
+    """Tạo thread để chạy feature extraction"""
+    def worker():
+        feats = extract_all_features(filepath, label=label)
+        min_max_scaler = joblib.load("DL/min_max_scaler.save")
+        standard_scaler = joblib.load("DL/standard_scaler.save")
+        features = [row[1:-1] for row in feats]
+        features_scaled = min_max_scaler.transform(features)
+
+        features_scaled = [row[1:] for row in features_scaled]
+        features_scaled = standard_scaler.transform(features_scaled)
+
+        model.load_weights('DL/model.weights.h5')
+        pred_proba = model.predict(features_scaled)
+        pred_class = np.argmax(pred_proba, axis=1)
+        print(index_label[pred_class[0]])
+        view_label.config(text=index_label[pred_class[0]])
+
+        if callback:
+            callback(feats)  # gửi kết quả về cho View (UI)
+    t = threading.Thread(target=worker)
+    t.start()
+
   
   
 class AppController:
