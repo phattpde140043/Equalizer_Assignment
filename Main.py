@@ -8,6 +8,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import common.utils as util
 import numpy as np
 from common.utils import FREQS as freqs,BAND_NAME as band_names
+import threading
 
 # Tạo Cửa sổ chính
 root = tk.Tk()
@@ -178,7 +179,16 @@ for i, (f,n) in enumerate(zip(freqs,band_names)):
     s.bind("<ButtonRelease-1>", lambda e, freq=f, lbl=db_label: control.on_scale_release(e, freq, lbl,scales,player,output_player))
     scales.append(s)
 
+def DrawSpectrogram(block, player):
+    def worker():
+        """Vẽ lại spectrogram cho block"""
+        control.plot_spectrogram(block['ax_spec'], player)
+        block['canvas_spec'].draw()
+        block['canvas_spec'].flush_events()
+        block['canvas_spec'].get_tk_widget().update_idletasks()
 
+    t = threading.Thread(target=worker)
+    t.start()
 
 def periodic_update():
     control.update_seek_bar(player, left_block)
@@ -188,22 +198,32 @@ def periodic_update():
     if player.get_Data() is not None:
         current_hash = util.hash_audio_data(player.get_Data())
         if left_block.get('waveform_hash') != current_hash:
+            print("cập nhật waveform")
             control.plot_waveform(left_block.get('ax_wf'),player)
-            control.plot_spectrogram(left_block['ax_spec'],player)
-            left_block['waveform_hash'] = current_hash
-            output_player.sample_rate = player.sample_rate
-            output_player.audio_data= player.getEqualizerData()
             left_block.get('canvas_wf').draw()
-            left_block.get('canvas_spec').draw()
+            left_block.get('canvas_wf').flush_events()
+            left_block.get('canvas_wf').get_tk_widget().update_idletasks()
+            print("cập nhật spectrogram")
+            DrawSpectrogram(left_block, player)
+            left_block['waveform_hash'] = current_hash
+            
+            
+    if player.band_Audio :
+        Equalizer_hash = player.getEqualizerHash()
 
-    if output_player.get_Data() is not None:
-        output_current_hash = util.hash_audio_data(output_player.get_Data())
-        if right_block.get('waveform_hash') != output_current_hash:
+        if right_block.get('waveform_hash') != Equalizer_hash :
+            Equalizer_data = player.getEqualizerData()
+            output_player.audio_data = Equalizer_data
+            output_player.sample_rate = player.sample_rate
+            print("cập nhật right waveform")
             control.plot_waveform(right_block.get('ax_wf'),output_player)
-            control.plot_spectrogram(right_block['ax_spec'],output_player)
-            right_block['waveform_hash'] = output_current_hash
             right_block.get('canvas_wf').draw()
-            right_block.get('canvas_spec').draw()
+            right_block.get('canvas_wf').flush_events()
+            right_block.get('canvas_wf').get_tk_widget().update_idletasks()
+            print("cập nhật right spectrogram")
+            DrawSpectrogram(right_block, output_player)
+            right_block['waveform_hash'] = Equalizer_hash
+
     
     if player.is_finised :
         player.stop()
@@ -228,4 +248,5 @@ btn_show.config(command=app.toggle_record)
 periodic_update()
 
 root.mainloop()
+
 

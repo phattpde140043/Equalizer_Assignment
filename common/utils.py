@@ -29,3 +29,6 @@ def hash_audio_data(audio_data: np.ndarray, max_bytes: int = 1_000_000):
     # Chuyển dữ liệu sang bytes (chỉ lấy một phần nếu quá dài)
     bytes_data = audio_data[:max_bytes // audio_data.itemsize].tobytes()
     return hashlib.md5(bytes_data).hexdigest()
+
+def hash_list(lst):
+    return hashlib.sha256(str(lst).encode()).hexdigest()

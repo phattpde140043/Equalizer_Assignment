@@ -153,8 +153,8 @@ def RunPredictFunction(filepath,view_label,label="unknown", callback=None):
         model.load_weights('DL/model.weights.h5')
         pred_proba = model.predict(features_scaled)
         pred_class = np.argmax(pred_proba, axis=1)
-        print(index_label[pred_class[0]])
-        view_label.config(text=index_label[pred_class[0]])
+        #print(index_label[pred_class[0]])
+        view_label.config(text=f"Based on signal analysis, the audio file belongs to the {index_label[pred_class[0]]} genre.")
 
         if callback:
             callback(feats)  # gửi kết quả về cho View (UI)
