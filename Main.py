@@ -27,7 +27,7 @@ control_frame.pack(pady=10)
 btn_show = tk.Button(control_frame, text="Bắt đầu ghi âm")
 btn_show.pack(side=tk.LEFT, padx=10)
 
-btn_upload = tk.Button(control_frame, text="Upload file audio", command = lambda: control.handle_upload(player))
+btn_upload = tk.Button(control_frame, text="Upload file audio", command = lambda: control.handle_upload(player,label =music_type_label))
 btn_upload.pack(side=tk.LEFT, padx=10)
 
 btn_quit = tk.Button(control_frame, text="Đóng ứng dụng",command=lambda: control.handle_quit(root) )
@@ -145,6 +145,8 @@ right_block['seek'].bind("<Button-1>", lambda event: control.onSeekStart(event, 
 
 # Equalizer frame (8 thanh)
 band_frame = tk.Frame(equalizer_frame)
+music_type_label = tk.Label(band_frame, text="Based on signal analysis, the audio file belongs to the jazz genre. The recommended parameters are:", font=("Arial", 14, "bold"))
+music_type_label.pack(side=tk.TOP, pady=(0, 4))
 band_frame.pack(side=tk.TOP, fill=tk.X, padx=8, pady=8)
 
 scales = []
@@ -207,9 +209,8 @@ def periodic_update():
         player.stop()
 
     if output_player.is_finised :
-        player.stop()
+        output_player.stop()
         
-    
     # Gọi lại chính nó sau 1000ms
     root.after(1000, periodic_update)
 

@@ -44,6 +44,7 @@ def extract_all_features(file_path, label="unknown", sr=22050, segment_duration=
         
         # Tempo
         tempo = librosa.beat.tempo(y=segment, sr=sr)[0]
+        #tempo = librosa.feature.rhythm.tempo(y=segment, sr=sr)[0]
         
         # MFCC
         mfcc = librosa.feature.mfcc(y=segment, sr=sr, n_mfcc=20)
@@ -77,15 +78,15 @@ def extract_all_features(file_path, label="unknown", sr=22050, segment_duration=
 
 
 # Đọc file audio data
-audio_path = "path/to/audio" # Đây là đường dẫn tới file audio
+#audio_path = "path/to/audio" # Đây là đường dẫn tới file audio
 
-features = extract_all_features(audio_path)
+#features = extract_all_features(audio_path)
 
-min_max_scaler = joblib.load("min_max_scaler.save")
-standard_scaler = joblib.load("standard_scaler.save")
+#min_max_scaler = joblib.load("min_max_scaler.save")
+#standard_scaler = joblib.load("standard_scaler.save")
 
-features = [row[1:-1] for row in features]
-features_scaled = min_max_scaler.transform(features)
+#features = [row[1:-1] for row in features]
+#features_scaled = min_max_scaler.transform(features)
 
-features_scaled = [row[1:] for row in features_scaled]
-features_scaled = standard_scaler.transform(features_scaled)
+#features_scaled = [row[1:] for row in features_scaled]
+#features_scaled = standard_scaler.transform(features_scaled)
