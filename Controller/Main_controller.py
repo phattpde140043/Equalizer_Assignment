@@ -1,28 +1,23 @@
 from tkinter import filedialog
 
-from DL import process
 from common import utils
 from common.utils import FREQS as freqs
-import joblib
+from common.utils import apply_equalizer 
+
 import numpy as np
 import matplotlib
-import threading
+
 import math
 import scipy.signal as signal
 from Models.RealtimeRecorder import RealtimeRecorder
-from DL.process import extract_all_features
-from DL.predict import model,index_label
 
-
-
-def handle_upload(player,label):
+def handle_upload(player):
     filepath = filedialog.askopenfilename(
         title="Chọn file audio",
         filetypes=[("Audio Files", "*.wav *.mp3 *.flac"), ("All files", "*.*")]
     )
     if filepath:
         player.load_file(filepath)
-        RunPredictFunction(filepath,view_label=label)
 
 def handle_play(player):
     player.play()
@@ -37,19 +32,27 @@ def handle_quit(root):
     root.destroy()
 
 # update label mỗi khi thay đổi giá trị của equalizer
-def on_scale_release(event, f, lbl,scales,player,output_player):
+def on_scale_release(event, f, lbl, scales, player, output_player):
     v = float(event.widget.get())
     lbl.config(text=f"{v:.1f} dB")
 
-    # Tạo dict tổng hợp giá trị của tất cả các scale
     values = [s.get() for s in scales]
-    print(values)  # In dict tổng hợp khi nhả chuột
 
+    # 🛡️ Chuẩn hóa độ dài cho chắc (10 band)
+    if len(values) != len(freqs):
+        tmp = np.zeros(len(freqs))
+        n = min(len(values), len(freqs))
+        tmp[:n] = values[:n]
+        values = tmp.tolist()
+
+    # Cập nhật gain đang dùng cho EQ real-time
+    player.equalizer_gain = values
+
+    # (Giữ nguyên) xử lý hậu kỳ để hiển thị panel phải nếu bạn muốn so sánh A/B
     if player.get_Data() is None:
         return
-    
-    player.equalizer_gain= values
-    output_player.audio_data= player.getEqualizerData()
+    output_player.audio_data = player.getEqualizerData()
+
 
 
 
@@ -86,6 +89,10 @@ def plot_waveform(ax, player, sr=44100):
         sr = player.get_Sampling_rate()
         print(len(data)/sr)
 
+    if len(data) < 1024:
+        ax.set_title("Spectrogram (đang chờ đủ dữ liệu)")
+        ax.figure.canvas.draw_idle()
+        return
     
     x = np.linspace(0, len(data)/sr, len(data))
     ax.plot(x, data, color='#ff4040')
@@ -137,36 +144,13 @@ def bandpass_sos(lowcut, highcut, fs, order=4):
     high = highcut / nyq
     sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
     return sos
-
-def RunPredictFunction(filepath,view_label,label="unknown", callback=None):
-    """Tạo thread để chạy feature extraction"""
-    def worker():
-        feats = extract_all_features(filepath, label=label)
-        min_max_scaler = joblib.load("DL/min_max_scaler.save")
-        standard_scaler = joblib.load("DL/standard_scaler.save")
-        features = [row[1:-1] for row in feats]
-        features_scaled = min_max_scaler.transform(features)
-
-        features_scaled = [row[1:] for row in features_scaled]
-        features_scaled = standard_scaler.transform(features_scaled)
-
-        model.load_weights('DL/model.weights.h5')
-        pred_proba = model.predict(features_scaled)
-        pred_class = np.argmax(pred_proba, axis=1)
-        print(index_label[pred_class[0]])
-        view_label.config(text=index_label[pred_class[0]])
-
-        if callback:
-            callback(feats)  # gửi kết quả về cho View (UI)
-    t = threading.Thread(target=worker)
-    t.start()
-
   
   
 class AppController:
     def __init__(self, player, ui_refs=None):
         self.player = player
         self.ui = ui_refs or {}
+        self.player.equalizer_gain = np.zeros(len(freqs))
 
         self.recorder = RealtimeRecorder(
             samplerate=16000,
@@ -193,6 +177,13 @@ class AppController:
         if rms < 0.005:
             chunk = chunk * 0.2
 
+        # ✅ EQ real-time: dùng gain hiện tại từ sliders
+        try:
+            chunk = apply_equalizer(chunk, self.player.equalizer_gain, freqs, sr)
+        except Exception as e:
+            print("[EQ] Lỗi áp dụng EQ:", e)
+
+        # Lưu về buffer phát lại
         if self.player.get_Data() is None:
             self.player.set_data(chunk, sr)
         else:
