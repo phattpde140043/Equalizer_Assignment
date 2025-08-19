@@ -30,7 +30,10 @@ def hash_audio_data(audio_data: np.ndarray, max_bytes: int = 1_000_000):
     # Chuyển dữ liệu sang bytes (chỉ lấy một phần nếu quá dài)
     bytes_data = audio_data[:max_bytes // audio_data.itemsize].tobytes()
     return hashlib.md5(bytes_data).hexdigest()
-
+  
+def hash_list(lst):
+    return hashlib.sha256(str(lst).encode()).hexdigest()
+  
 def apply_equalizer(audio: np.ndarray, gains_db, freqs, sr: int) -> np.ndarray:
     """
     Áp dụng EQ theo 10 band lên một chunk audio (real-time).
@@ -77,4 +80,6 @@ def apply_equalizer(audio: np.ndarray, gains_db, freqs, sr: int) -> np.ndarray:
     if max_val > 1e-9 and max_val > 1.0:
         out = out / max_val
 
-    return out.astype(np.float32)
+    return out.astype(np.float32) 
+
+

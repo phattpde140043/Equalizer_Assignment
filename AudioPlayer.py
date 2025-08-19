@@ -3,8 +3,10 @@ import numpy as np
 import librosa
 import threading
 import time
-from common.utils import FREQS as freqs
+from common.utils import FREQS as freqs, hash_audio_data, hash_list
 import scipy.signal as signal
+import threading
+
 
 class AudioPlayer:
     def __init__(self):
@@ -23,11 +25,23 @@ class AudioPlayer:
     def load_file(self, filepath):
         if self.audio_data is not None:
             self.clear()
+        print("start load file")
         self.audio_data, self.sample_rate = librosa.load(filepath, sr=None)
         self.position = 0
-        print(f"Đã load: {filepath} - {len(self.audio_data)} samples")
-        self.FilterByBand()
         self.equalizer_gain=np.zeros(len(freqs))
+        self.RunFilterByBand()  # Chạy lọc bandpass ngay sau khi load file
+        
+
+    def RunFilterByBand(self, callback=None):
+        """Tạo thread để chạy feature extraction"""
+        def worker():
+            print("Running filter by band...")
+            self.FilterByBand()
+            print("Filter by band completed.")
+        if callback:
+            callback(None)  # gửi kết quả về cho View (UI)
+        t = threading.Thread(target=worker)
+        t.start()
 
     #Thêm set_data và append_data
     def set_data(self, data, sr):
@@ -82,7 +96,6 @@ class AudioPlayer:
                 return
 
             end = self.position + frames
-            print(self.position)
             chunk = self.audio_data[self.position:end]
 
             if len(chunk) < frames:
@@ -184,6 +197,9 @@ class AudioPlayer:
 
 
     def getEqualizerData(self):
+        if self.band_Audio is None: 
+            return None
+
         output = np.zeros_like(self.audio_data, dtype=np.float64)
 
         for i, (band, gain) in enumerate(zip(self.band_Audio,self.equalizer_gain)) :
@@ -197,6 +213,11 @@ class AudioPlayer:
             output = output / max_val
 
         return output
+    
+    def getEqualizerHash(self):
+        return hash_list(self.band_Audio)+ hash_list(self.equalizer_gain)
+    
+
 
 # Hàm helper tạo bộ lọc bandpass dạng sos
 def bandpass_sos(lowcut, highcut, fs, order=4):
