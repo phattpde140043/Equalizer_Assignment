@@ -1,7 +1,7 @@
 from tkinter import filedialog
 
 from common import utils
-from common.utils import FREQS as freqs
+from common.utils import FREQS as freqs, hash_audio_data, hash_list
 from common.utils import apply_equalizer 
 from common.utils import apply_equalizer_fast
 
@@ -12,6 +12,12 @@ import math
 import scipy.signal as signal
 from Models.RealtimeRecorder import RealtimeRecorder
 from Models.SystemRecorder import SystemRecorder
+
+import threading
+from DL.process import extract_all_features
+from DL.predict import model, index_label
+import joblib
+
 
 def handle_upload(player):
     filepath = filedialog.askopenfilename(
@@ -203,6 +209,7 @@ class AppController:
             on_chunk=self._on_chunk_mic,
             on_state=self._on_state
         )
+        self.max_seconds = 300  # giới hạn buffer ~5 phút để tránh phình RAM
 
         # Recorder SYSTEM (loopback)
         self.system_recorder = SystemRecorder(
