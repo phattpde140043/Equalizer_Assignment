@@ -10,6 +10,7 @@ import matplotlib
 import math
 import scipy.signal as signal
 from Models.RealtimeRecorder import RealtimeRecorder
+from Models.SystemRecorder import SystemRecorder
 
 def handle_upload(player):
     filepath = filedialog.askopenfilename(
@@ -177,13 +178,23 @@ class AppController:
         self.recorder = RealtimeRecorder(
             samplerate=16000,
             channels=1,
-            blocksize=1024,   # callback nhỏ cho an toàn
-            batch_ms=240,     # xử lý ~200–300 ms như yêu cầu
+            blocksize=1024,
+            batch_ms=240,
             max_wait_ms=350,
             on_chunk=self._on_chunk,
             on_state=self._on_state
         )
-        self.max_seconds = 30  # giới hạn buffer ~30s để tránh phình RAM
+
+        self.system_recorder = SystemRecorder(
+            samplerate=16000,
+            channels=1,
+            blocksize=1024,
+            batch_ms=240,
+            on_chunk=self._on_chunk_system,
+            on_state=None  # Có thể truyền vào nếu muốn hiện trạng thái
+        )
+
+        self.max_seconds = 30  # Giới hạn độ dài buffer
 
     def _on_state(self, is_recording: bool):
         if 'status_var' in self.ui:
@@ -194,18 +205,21 @@ class AppController:
             )
 
     def _on_chunk(self, chunk, sr):
-        # Ví dụ xử lý rất nhẹ theo batch: noise gate
+        self._process_chunk(chunk, sr)
+
+    def _on_chunk_system(self, chunk, sr):
+        self._process_chunk(chunk, sr)
+
+    def _process_chunk(self, chunk, sr):
         rms = np.sqrt(np.mean(chunk**2) + 1e-9)
         if rms < 0.005:
             chunk = chunk * 0.2
 
-        # ✅ EQ real-time: dùng gain hiện tại từ sliders
         try:
             chunk = apply_equalizer(chunk, self.player.equalizer_gain, freqs, sr)
         except Exception as e:
             print("[EQ] Lỗi áp dụng EQ:", e)
 
-        # Lưu về buffer phát lại
         if self.player.get_Data() is None:
             self.player.set_data(chunk, sr)
         else:
@@ -216,9 +230,10 @@ class AppController:
                 self.player.set_data(data[-max_len:], sr)
 
     def toggle_record(self):
-        if self.recorder.is_recording:
+        if self.recorder.is_recording or self.system_recorder.is_recording:
             self.recorder.stop()
+            self.system_recorder.stop()
         else:
-            # reset buffer trước khi thu mới
             self.player.set_data(np.zeros(0, dtype=np.float32), 16000)
             self.recorder.start()
+            self.system_recorder.start()
