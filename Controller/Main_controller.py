@@ -3,6 +3,7 @@ from tkinter import filedialog
 from common import utils
 from common.utils import FREQS as freqs, hash_audio_data, hash_list
 from common.utils import apply_equalizer 
+from common.utils import apply_equalizer_fast
 
 import numpy as np
 import matplotlib
@@ -10,11 +11,13 @@ import matplotlib
 import math
 import scipy.signal as signal
 from Models.RealtimeRecorder import RealtimeRecorder
-import threading
+from Models.SystemRecorder import SystemRecorder
 
+import threading
 from DL.process import extract_all_features
 from DL.predict import model, index_label
 import joblib
+
 
 def handle_upload(player):
     filepath = filedialog.askopenfilename(
@@ -173,57 +176,170 @@ def RunPredictFunction(filepath,view_label,label="unknown", callback=None):
     t = threading.Thread(target=worker)
     t.start()
 
+
 class AppController:
     def __init__(self, player, ui_refs=None):
         self.player = player
         self.ui = ui_refs or {}
-        self.player.equalizer_gain = np.zeros(len(freqs))
+        self.player.equalizer_gain = np.zeros(len(freqs), dtype=float)
 
+        # Cấu hình audio
+        self.samplerate = 16000
+        self.blocksize = 1024
+        self.batch_ms = 240
+        self.max_seconds = 30
+
+        # Cờ bật/tắt từng nguồn + gain mix
+        self.enable_mic = True
+        self.enable_sys = True
+        self.mix_gain_mic = 1.0
+        self.mix_gain_sys = 1.0
+
+        # Bộ đệm tạm cho từng nguồn (đồng bộ trước khi mix)
+        self._mic_buf = np.zeros(0, dtype=np.float32)
+        self._sys_buf = np.zeros(0, dtype=np.float32)
+
+        # Recorder MIC
         self.recorder = RealtimeRecorder(
-            samplerate=16000,
+            samplerate=self.samplerate,
             channels=1,
-            blocksize=1024,   # callback nhỏ cho an toàn
-            batch_ms=240,     # xử lý ~200–300 ms như yêu cầu
+            blocksize=self.blocksize,     # block lớn vừa phải → callback ít hơn
+            batch_ms=self.batch_ms,       # gom 200–300ms cho ổn định
             max_wait_ms=350,
-            on_chunk=self._on_chunk,
+            on_chunk=self._on_chunk_mic,
             on_state=self._on_state
         )
         self.max_seconds = 300  # giới hạn buffer ~5 phút để tránh phình RAM
 
+        # Recorder SYSTEM (loopback)
+        self.system_recorder = SystemRecorder(
+            samplerate=self.samplerate,
+            channels=1,
+            blocksize=self.blocksize,
+            batch_ms=self.batch_ms,
+            on_chunk=self._on_chunk_sys,
+            on_state=None
+        )
+
+    # ==== UI state ====
     def _on_state(self, is_recording: bool):
-        if 'status_var' in self.ui:
+        if 'status_var' in self.ui and self.ui['status_var'] is not None:
             self.ui['status_var'].set("Đang ghi..." if is_recording else "Đã dừng")
-        if 'btn_record' in self.ui:
+        if 'btn_record' in self.ui and self.ui['btn_record'] is not None:
             self.ui['btn_record'].config(
                 text="Dừng ghi" if is_recording else "Bắt đầu ghi âm"
             )
 
-    def _on_chunk(self, chunk, sr):
-        # Ví dụ xử lý rất nhẹ theo batch: noise gate
-        rms = np.sqrt(np.mean(chunk**2) + 1e-9)
-        if rms < 0.005:
+    # ==== Callbacks từ 2 nguồn ====
+    def _on_chunk_mic(self, chunk: np.ndarray, sr: int):
+        if not self.enable_mic:  # bỏ qua nếu tắt mic
+            return
+        self._append_buf('mic', chunk)
+        self._try_mix_and_push()
+
+    def _on_chunk_sys(self, chunk: np.ndarray, sr: int):
+        if not self.enable_sys:  # bỏ qua nếu tắt system
+            return
+        self._append_buf('sys', chunk)
+        self._try_mix_and_push()
+
+    # ==== Buffer helpers ====
+    def _append_buf(self, which: str, chunk: np.ndarray):
+        # Noise-gate nhẹ cho ổn định: giảm cường độ nếu block quá nhỏ
+        if (chunk.astype(np.float32) ** 2).mean() < 1e-5:
             chunk = chunk * 0.2
 
-        # ✅ EQ real-time: dùng gain hiện tại từ sliders
+        if which == 'mic':
+            self._mic_buf = np.concatenate([self._mic_buf, chunk.astype(np.float32)], axis=0)
+        else:
+            self._sys_buf = np.concatenate([self._sys_buf, chunk.astype(np.float32)], axis=0)
+
+    def _try_mix_and_push(self):
+        mic_len = len(self._mic_buf)
+        sys_len = len(self._sys_buf)
+
+        if self.enable_mic and self.enable_sys:
+            # Lấy phần chung để tránh lệch
+            n = min(mic_len, sys_len)
+            if n <= 0:
+                return
+            mic_part = self._mic_buf[:n]
+            sys_part = self._sys_buf[:n]
+            # Cắt bỏ phần đã dùng
+            self._mic_buf = self._mic_buf[n:]
+            self._sys_buf = self._sys_buf[n:]
+            # Mix theo gain
+            mixed = self.mix_gain_mic * mic_part + self.mix_gain_sys * sys_part
+
+        elif self.enable_mic and not self.enable_sys:
+            if mic_len <= 0:
+                return
+            n = mic_len
+            mixed = self._mic_buf[:n]
+            self._mic_buf = self._mic_buf[n:]
+
+        elif self.enable_sys and not self.enable_mic:
+            if sys_len <= 0:
+                return
+            n = sys_len
+            mixed = self._sys_buf[:n]
+            self._sys_buf = self._sys_buf[n:]
+
+        else:
+            # Cả hai đều tắt
+            return
+
+        # Giới hạn biên độ
+        mixed = np.clip(mixed, -1.0, 1.0)
+
+        # EQ nhanh (IIR) với gain hiện tại trên player
         try:
-            chunk = apply_equalizer(chunk, self.player.equalizer_gain, freqs, sr)
+            gains = getattr(self.player, "equalizer_gain", None)
+            if gains is not None and len(gains) == len(freqs):
+                mixed = apply_equalizer_fast(mixed, gains, freqs, self.samplerate)
         except Exception as e:
-            print("[EQ] Lỗi áp dụng EQ:", e)
+            # Không spam log trong realtime
+            print("[EQ fast] lỗi:", e)
 
-        # Lưu về buffer phát lại
+        # Đẩy vào player buffer (duy trì max_seconds)
         if self.player.get_Data() is None:
-            self.player.set_data(chunk, sr)
+            self.player.set_data(mixed, self.samplerate)
         else:
-            self.player.append_data(chunk)
+            self.player.append_data(mixed)
             data = self.player.get_Data()
-            max_len = int(self.max_seconds * sr)
+            max_len = int(self.max_seconds * self.samplerate)
             if data.shape[0] > max_len:
-                self.player.set_data(data[-max_len:], sr)
+                self.player.set_data(data[-max_len:], self.samplerate)
 
+    # ==== Public API ====
     def toggle_record(self):
-        if self.recorder.is_recording:
+        if self.recorder.is_recording or self.system_recorder.is_recording:
             self.recorder.stop()
+            self.system_recorder.stop()
         else:
-            # reset buffer trước khi thu mới
-            self.player.set_data(np.zeros(0, dtype=np.float32), 16000)
-            self.recorder.start()
+            # reset toàn bộ
+            self._mic_buf = np.zeros(0, dtype=np.float32)
+            self._sys_buf = np.zeros(0, dtype=np.float32)
+            self.player.set_data(np.zeros(0, dtype=np.float32), self.samplerate)
+            # bắt đầu 2 luồng
+            try:
+                if self.enable_mic:
+                    self.recorder.start()
+            except Exception as e:
+                print("[MIC] start lỗi:", e)
+            try:
+                if self.enable_sys:
+                    self.system_recorder.start()
+            except Exception as e:
+                print("[SYSTEM] start lỗi:", e)
+
+    # Tuỳ chọn: API bật/tắt nguồn & chỉnh gain mix ngay trong lúc chạy
+    def set_mic_enabled(self, enabled: bool):
+        self.enable_mic = bool(enabled)
+
+    def set_system_enabled(self, enabled: bool):
+        self.enable_sys = bool(enabled)
+
+    def set_mix_gains(self, mic_gain=1.0, sys_gain=1.0):
+        self.mix_gain_mic = float(mic_gain)
+        self.mix_gain_sys = float(sys_gain)

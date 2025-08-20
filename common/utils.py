@@ -1,6 +1,6 @@
 import numpy as np
 import hashlib
-from scipy.signal import butter, sosfilt
+from scipy.signal import butter, sosfilt, lfilter
 
 FREQS = [31.25,62.5,125,250,500,1000,2000,4000,8000,16000]
 BAND_NAME = ["Sub-bass","Bass","Low","Low-mid","Mid","Upper mid","Presence","Brilliance","High","Air"]  
@@ -83,3 +83,18 @@ def apply_equalizer(audio: np.ndarray, gains_db, freqs, sr: int) -> np.ndarray:
     return out.astype(np.float32) 
 
 
+def apply_equalizer_fast(data, gains, freqs, sr):
+    if gains is None or len(gains) != len(freqs):
+        return data
+
+    output = np.zeros_like(data)
+    for gain_db, freq in zip(gains, freqs):
+        if gain_db == 0:
+            continue
+        low = freq / np.sqrt(2)
+        high = freq * np.sqrt(2)
+        b, a = butter(2, [low/(sr/2), high/(sr/2)], btype='band')
+        band = lfilter(b, a, data)
+        output += band * (10**(gain_db / 20.0))
+
+    return np.clip(data + output, -1.0, 1.0)
