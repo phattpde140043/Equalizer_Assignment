@@ -249,4 +249,3 @@ periodic_update()
 
 root.mainloop()
 
-
