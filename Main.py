@@ -150,7 +150,7 @@ export_file_btn.pack(side=tk.RIGHT, padx=2)
 
 # Equalizer frame (8 thanh)
 band_frame = tk.Frame(equalizer_frame)
-music_type_label = tk.Label(band_frame, text="Based on signal analysis, the audio file belongs to the jazz genre. The recommended parameters are:", font=("Arial", 14, "bold"))
+music_type_label = tk.Label(band_frame, text="", font=("Arial", 14, "bold"))
 music_type_label.pack(side=tk.TOP, pady=(0, 4))
 band_frame.pack(side=tk.TOP, fill=tk.X, padx=8, pady=8)
 
