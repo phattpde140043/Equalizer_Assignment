@@ -15,6 +15,7 @@ python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .              # cài đặt editable mode
+```
 ---
 ## 🚀 Các chức năng chính
 - **Record Realtime**: Ghi âm từ micro, hiển thị waveform trực tiếp.
