@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog
-from AudioPlayer import AudioPlayer
+from Models.AudioPlayer import AudioPlayer
 import Controller.Main_controller as control
 import tkinter.ttk as ttk
 from matplotlib.figure import Figure
