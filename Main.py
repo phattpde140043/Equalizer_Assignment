@@ -120,6 +120,7 @@ def make_chart_block(parent):
     block['ax_spec'] = ax_spec          # Axes của spectrogram
     block['canvas_spec'] = canvas_spec  # Canvas của spectrogram
 
+    block['btn_frame']= btns
     block['play_btn']= play_btn
     block['pause_btn']= pause_btn
     block['stop_btn']= stop_btn
@@ -143,6 +144,9 @@ right_block['pause_btn'].config(command=lambda: control.handle_pause(output_play
 right_block['stop_btn'].config(command=lambda: control.handle_stop(output_player))
 right_block['seek'].bind("<ButtonRelease-1>", lambda event: control.onSeek(event, right_block, output_player))
 right_block['seek'].bind("<Button-1>", lambda event: control.onSeekStart(event, right_block))
+
+export_file_btn = tk.Button(right_block['btn_frame'], text="Export", width=6, command=lambda: control.handle_export(output_player))
+export_file_btn.pack(side=tk.RIGHT, padx=2)
 
 # Equalizer frame (8 thanh)
 band_frame = tk.Frame(equalizer_frame)
@@ -224,8 +228,13 @@ def periodic_update():
             DrawSpectrogram(right_block, output_player)
             right_block['waveform_hash'] = Equalizer_hash
 
-    
-    if player.is_finised :
+            if output_player.audio_data is not None:
+                export_file_btn.pack(side=tk.RIGHT, padx=2)
+
+    if output_player.audio_data is None:
+        export_file_btn.pack_forget()
+
+    if player.is_finised:
         player.stop()
 
     if output_player.is_finised :

@@ -6,6 +6,9 @@ import time
 from common.utils import FREQS as freqs, hash_audio_data, hash_list
 import scipy.signal as signal
 import threading
+import soundfile as sf
+from pydub import AudioSegment
+from tkinter import filedialog
 
 
 class AudioPlayer:
@@ -217,7 +220,35 @@ class AudioPlayer:
     def getEqualizerHash(self):
         return hash_list(self.band_Audio)+ hash_list(self.equalizer_gain)
     
+    def export_audio_dialog(self):
+        if self.audio_data is None or self.sample_rate is None:
+            raise ValueError("Không có dữ liệu âm thanh để xuất")
 
+        # Cho phép chọn wav hoặc mp3
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".wav",
+            filetypes=[("WAV files", "*.wav"), ("MP3 files", "*.mp3")]
+        )
+
+        if not filepath:  # Người dùng cancel
+            print("❌ Người dùng đã hủy lưu file.")
+            return
+
+        if filepath.endswith(".wav"):
+            # Xuất trực tiếp WAV
+            sf.write(filepath, self.audio_data, self.sample_rate)
+            print(f"✅ File WAV đã được lưu: {filepath}")
+
+        elif filepath.endswith(".mp3"):
+            # Xuất tạm sang WAV rồi convert sang MP3
+            temp_wav = "temp_output.wav"
+            sf.write(temp_wav, self.audio_data, self.sample_rate)
+            sound = AudioSegment.from_wav(temp_wav)
+            sound.export(filepath, format="mp3")
+            print(f"✅ File MP3 đã được lưu: {filepath}")
+
+        else:
+            print("⚠ Định dạng không được hỗ trợ.")
 
 # Hàm helper tạo bộ lọc bandpass dạng sos
 def bandpass_sos(lowcut, highcut, fs, order=4):

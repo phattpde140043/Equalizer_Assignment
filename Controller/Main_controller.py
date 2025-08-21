@@ -19,13 +19,14 @@ from DL.predict import model, index_label
 import joblib
 
 
-def handle_upload(player):
+def handle_upload(player,label):
     filepath = filedialog.askopenfilename(
         title="Chọn file audio",
         filetypes=[("Audio Files", "*.wav *.mp3 *.flac"), ("All files", "*.*")]
     )
     if filepath:
         player.load_file(filepath)
+        RunPredictFunction(filepath,view_label=label)
 
 def handle_play(player):
     player.play()
@@ -38,6 +39,9 @@ def handle_stop(player):
 
 def handle_quit(root):
     root.destroy()
+
+def handle_export(player):
+    player.export_audio_dialog()
 
 # update label mỗi khi thay đổi giá trị của equalizer
 def on_scale_release(event, f, lbl, scales, player, output_player):
