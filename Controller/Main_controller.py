@@ -50,23 +50,15 @@ def on_scale_release(event, f, lbl, scales, player, output_player):
 
     values = [s.get() for s in scales]
 
-    # 🛡️ Chuẩn hóa độ dài cho chắc (10 band)
+    # Chuẩn hoá độ dài theo số band
     if len(values) != len(freqs):
         tmp = np.zeros(len(freqs))
         n = min(len(values), len(freqs))
         tmp[:n] = values[:n]
         values = tmp.tolist()
 
-    # Cập nhật gain đang dùng cho EQ real-time
+    # Cập nhật gain cho EQ realtime (AppController sẽ áp EQ trên mixed_raw)
     player.equalizer_gain = values
-
-    # (Giữ nguyên) xử lý hậu kỳ để hiển thị panel phải nếu bạn muốn so sánh A/B
-    if player.get_Data() is None:
-        return
-    output_player.audio_data = player.getEqualizerData()
-
-
-
 
 # update label của thời gian
 def update_seek_bar(player, block):
@@ -89,29 +81,28 @@ def update_seek_bar(player, block):
 # Hàm vẽ mẫu waveform (placeholder)
 def plot_waveform(ax, player, sr=44100):
     ax.clear()
-
     if player.get_Data() is None:
-        duration =120
-        sampling_rate= 44100
-        t = np.linspace(0, duration, duration*sampling_rate,endpoint= False)
-        data = utils.Generate_white_audio(duration,sampling_rate)
-    
+        duration = 120
+        sampling_rate = 44100
+        data = utils.Generate_white_audio(duration, sampling_rate)
+        sr = sampling_rate
     else:
         data = player.get_Data()
         sr = player.get_Sampling_rate()
-        print(len(data)/sr)
+        # print(len(data)/sr)  # <- bỏ log này để đỡ spam
 
     if len(data) < 1024:
-        ax.set_title("Spectrogram (đang chờ đủ dữ liệu)")
+        ax.set_title("Waveform (đang chờ đủ dữ liệu)")
         ax.figure.canvas.draw_idle()
         return
-    
+
     x = np.linspace(0, len(data)/sr, len(data))
     ax.plot(x, data, color='#ff4040')
     ax.set_ylim(-1, 1)
     ax.set_xlabel("time [s]")
     ax.set_ylabel("Normalized Amplitude")
     ax.grid(False)
+
 
 def onSeek(event, seek, player):
     value = seek.get('seek').get()
@@ -182,9 +173,12 @@ def RunPredictFunction(filepath,view_label,label="unknown", callback=None):
 
 
 class AppController:
-    def __init__(self, player, ui_refs=None):
-        self.player = player
+    def __init__(self, player, output_player, ui_refs=None):
+        self.player = player                # TRÁI: RAW (chưa EQ)
+        self.output_player = output_player  # PHẢI: EQ (đã áp)
         self.ui = ui_refs or {}
+
+        # EQ state (dB)
         self.player.equalizer_gain = np.zeros(len(freqs), dtype=float)
 
         # Cấu hình audio
@@ -262,80 +256,87 @@ class AppController:
         mic_len = len(self._mic_buf)
         sys_len = len(self._sys_buf)
 
+        # === kết hợp nguồn thành RAW ===
         if self.enable_mic and self.enable_sys:
-            # Lấy phần chung để tránh lệch
             n = min(mic_len, sys_len)
             if n <= 0:
                 return
-            mic_part = self._mic_buf[:n]
-            sys_part = self._sys_buf[:n]
-            # Cắt bỏ phần đã dùng
-            self._mic_buf = self._mic_buf[n:]
-            self._sys_buf = self._sys_buf[n:]
-            # Mix theo gain
-            mixed = self.mix_gain_mic * mic_part + self.mix_gain_sys * sys_part
-
-        elif self.enable_mic and not self.enable_sys:
-            if mic_len <= 0:
-                return
-            n = mic_len
-            mixed = self._mic_buf[:n]
-            self._mic_buf = self._mic_buf[n:]
-
-        elif self.enable_sys and not self.enable_mic:
-            if sys_len <= 0:
-                return
-            n = sys_len
-            mixed = self._sys_buf[:n]
-            self._sys_buf = self._sys_buf[n:]
-
+            mic_part = self._mic_buf[:n];  self._mic_buf = self._mic_buf[n:]
+            sys_part = self._sys_buf[:n];  self._sys_buf = self._sys_buf[n:]
+            mixed_raw = self.mix_gain_mic * mic_part + self.mix_gain_sys * sys_part
+        elif self.enable_mic:
+            if mic_len <= 0: return
+            mixed_raw = self._mic_buf;      self._mic_buf = np.zeros(0, dtype=np.float32)
+        elif self.enable_sys:
+            if sys_len <= 0: return
+            mixed_raw = self._sys_buf;      self._sys_buf = np.zeros(0, dtype=np.float32)
         else:
-            # Cả hai đều tắt
             return
 
-        # Giới hạn biên độ
-        mixed = np.clip(mixed, -1.0, 1.0)
+        mixed_raw = np.clip(mixed_raw.astype(np.float32, copy=False), -1.0, 1.0)
 
-        # EQ nhanh (IIR) với gain hiện tại trên player
+        # === TRÁI: RAW (chưa EQ)
+        if self.player.get_Data() is None:
+            self.player.set_data(mixed_raw, self.samplerate)
+        else:
+            self.player.append_data(mixed_raw)
+            dataL = self.player.get_Data()
+            max_len = int(self.max_seconds * self.samplerate)
+            if dataL.shape[0] > max_len:
+                self.player.set_data(dataL[-max_len:], self.samplerate)
+
+        # === PHẢI: áp EQ nhanh
         try:
             gains = getattr(self.player, "equalizer_gain", None)
-            if gains is not None and len(gains) == len(freqs):
-                mixed = apply_equalizer_fast(mixed, gains, freqs, self.samplerate)
+            mixed_eq = (apply_equalizer_fast(mixed_raw, gains, freqs, self.samplerate)
+                        if gains is not None and len(gains) == len(freqs)
+                        else mixed_raw)
         except Exception as e:
-            # Không spam log trong realtime
             print("[EQ fast] lỗi:", e)
+            mixed_eq = mixed_raw
 
-        # Đẩy vào player buffer (duy trì max_seconds)
-        if self.player.get_Data() is None:
-            self.player.set_data(mixed, self.samplerate)
+        mixed_eq = np.clip(mixed_eq, -1.0, 1.0)
+        if self.output_player.get_Data() is None:
+            self.output_player.set_data(mixed_eq, self.samplerate)
         else:
-            self.player.append_data(mixed)
-            data = self.player.get_Data()
+            self.output_player.append_data(mixed_eq)
+            dataR = self.output_player.get_Data()
             max_len = int(self.max_seconds * self.samplerate)
-            if data.shape[0] > max_len:
-                self.player.set_data(data[-max_len:], self.samplerate)
+            if dataR.shape[0] > max_len:
+                self.output_player.set_data(dataR[-max_len:], self.samplerate)
+
 
     # ==== Public API ====
     def toggle_record(self):
         if self.recorder.is_recording or self.system_recorder.is_recording:
+            # DỪNG
             self.recorder.stop()
             self.system_recorder.stop()
+            # Rewind để play từ đầu (cả RAW & EQ còn nguyên)
+            for p in (self.player, self.output_player):
+                try:
+                    p.is_playing = False
+                    p.is_paused = False
+                    p.is_finised = False
+                    p.position = 0
+                except Exception:
+                    pass
         else:
-            # reset toàn bộ
+            # BẮT ĐẦU
             self._mic_buf = np.zeros(0, dtype=np.float32)
             self._sys_buf = np.zeros(0, dtype=np.float32)
+            # Làm trống để thu mới
             self.player.set_data(np.zeros(0, dtype=np.float32), self.samplerate)
-            # bắt đầu 2 luồng
+            self.output_player.set_data(np.zeros(0, dtype=np.float32), self.samplerate)
             try:
-                if self.enable_mic:
-                    self.recorder.start()
+                if self.enable_mic:  self.recorder.start()
             except Exception as e:
                 print("[MIC] start lỗi:", e)
             try:
-                if self.enable_sys:
-                    self.system_recorder.start()
+                if self.enable_sys:  self.system_recorder.start()
             except Exception as e:
                 print("[SYSTEM] start lỗi:", e)
+
 
     # Tuỳ chọn: API bật/tắt nguồn & chỉnh gain mix ngay trong lúc chạy
     def set_mic_enabled(self, enabled: bool):

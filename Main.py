@@ -62,14 +62,14 @@ def create_matplotlib_canvas(parent, height=2.5):
 
 
 
-def make_chart_block(parent):
+def make_chart_block(parent, src_player):
     block = {}
     # waveform (top)
     wf_frame = tk.Frame(parent)
     wf_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
     fig_wf, ax_wf, canvas_wf, widget_wf = create_matplotlib_canvas(wf_frame, height=1.2)
     widget_wf.pack(fill=tk.BOTH, expand=True)
-    control.plot_waveform(ax_wf,player=player)
+    control.plot_waveform(ax_wf, player=src_player)   # <-- dùng src_player
     canvas_wf.draw()
 
     # spectrogram (middle)
@@ -77,7 +77,7 @@ def make_chart_block(parent):
     spec_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=False, pady=6)
     fig_spec, ax_spec, canvas_spec, widget_spec = create_matplotlib_canvas(spec_frame, height=1.6)
     widget_spec.pack(fill=tk.BOTH, expand=True)
-    control.plot_spectrogram(ax_spec,player)
+    control.plot_spectrogram(ax_spec, src_player)     # <-- dùng src_player
     canvas_spec.draw()
 
     # player frame (bottom)
@@ -89,56 +89,49 @@ def make_chart_block(parent):
     time_left.pack(side=tk.LEFT, padx=4)
     seek = ttk.Scale(player_frame, from_=0, to=100, orient=tk.HORIZONTAL)
     seek.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-
     time_right = tk.Label(player_frame, text="0:00")
     time_right.pack(side=tk.LEFT, padx=4)
 
     # Playback buttons
     btns = tk.Frame(parent)
     btns.pack(side=tk.TOP, pady=4)
+    play_btn = tk.Button(btns, text="▶", width=3);  play_btn.pack(side=tk.LEFT, padx=2)
+    pause_btn = tk.Button(btns, text="⏸", width=3); pause_btn.pack(side=tk.LEFT, padx=2)
+    stop_btn = tk.Button(btns, text="⏹", width=3);  stop_btn.pack(side=tk.LEFT, padx=2)
 
-    play_btn = tk.Button(btns, text="▶", width=3)
-    play_btn.pack(side=tk.LEFT, padx=2)
-    pause_btn = tk.Button(btns, text="⏸", width=3)
-    pause_btn.pack(side=tk.LEFT, padx=2)
-    stop_btn = tk.Button(btns, text="⏹", width=3)
-    stop_btn.pack(side=tk.LEFT, padx=2)
-  
     # speed combobox
-    speed_label = tk.Label(btns, text="x")
-    speed_label.pack(side=tk.LEFT, padx=(10,0))
+    speed_label = tk.Label(btns, text="x"); speed_label.pack(side=tk.LEFT, padx=(10,0))
     speed_combo = ttk.Combobox(btns, values=["0.5","0.75","1.0","1.25","1.5","2.0"], width=4)
-    speed_combo.set("1.0")
-    speed_combo.pack(side=tk.LEFT, padx=2)
+    speed_combo.set("1.0"); speed_combo.pack(side=tk.LEFT, padx=2)
 
     # trả về các widget để ta có thể cập nhật sau
-    block['fig_wf'] = fig_wf            # Figure của waveform
-    block['ax_wf'] = ax_wf              # Axes của waveform (để vẽ lại)
-    block['canvas_wf'] = canvas_wf      # Canvas để .draw() lại khi cần
+    block['fig_wf'] = fig_wf
+    block['ax_wf'] = ax_wf
+    block['canvas_wf'] = canvas_wf
 
-    block['fig_spec'] = fig_spec        # Figure của spectrogram
-    block['ax_spec'] = ax_spec          # Axes của spectrogram
-    block['canvas_spec'] = canvas_spec  # Canvas của spectrogram
+    block['fig_spec'] = fig_spec
+    block['ax_spec'] = ax_spec
+    block['canvas_spec'] = canvas_spec
 
-    block['btn_frame']= btns
-    block['play_btn']= play_btn
-    block['pause_btn']= pause_btn
-    block['stop_btn']= stop_btn
+    block['btn_frame'] = btns
+    block['play_btn'] = play_btn
+    block['pause_btn'] = pause_btn
+    block['stop_btn'] = stop_btn
 
-    block['seek'] = seek                # Thanh seek thời gian
-    block['time_left'] = time_left      # Nhãn thời gian bên trái (ví dụ: "0:00")
-    block['time_right'] = time_right    # Nhãn thời gian bên phải (ví dụ: "1:45")
+    block['seek'] = seek
+    block['time_left'] = time_left
+    block['time_right'] = time_right
     block['waveform_hash'] = None
     block['isSeeking'] = False
     return block
 
-left_block = make_chart_block(left_chart_container)
+left_block = make_chart_block(left_chart_container, player)
 left_block['seek'].bind("<ButtonRelease-1>", lambda event: control.onSeek(event, left_block, player))
 left_block['seek'].bind("<Button-1>", lambda event: control.onSeekStart(event, left_block))
 left_block['play_btn'].config(command=lambda: control.handle_play(player))
 left_block['pause_btn'].config(command=lambda: control.handle_pause(player))
 left_block['stop_btn'].config(command=lambda: control.handle_stop(player))
-right_block = make_chart_block(right_chart_container)
+right_block = make_chart_block(right_chart_container, output_player)
 right_block['play_btn'].config(command=lambda: control.handle_play(output_player))
 right_block['pause_btn'].config(command=lambda: control.handle_pause(output_player))
 right_block['stop_btn'].config(command=lambda: control.handle_stop(output_player))
@@ -195,52 +188,88 @@ def DrawSpectrogram(block, player):
     t.start()
 
 def periodic_update():
+    # cập nhật thời gian
     control.update_seek_bar(player, left_block)
     control.update_seek_bar(output_player, right_block)
 
-    # === Cập nhật waveform nếu audio_data mới ==
+    # đang record?
+    is_recording = hasattr(app, "recorder") and (
+        getattr(app.recorder, "is_recording", False) or
+        getattr(app.system_recorder, "is_recording", False)
+    )
+
+    # reset hash khi đổi mode record <-> playback để ép vẽ lại ngay
+    prev_state = getattr(app, "_last_recording_state", None)
+    if prev_state is None or prev_state != is_recording:
+        left_block['waveform_hash'] = None
+        right_block['waveform_hash'] = None
+        app._last_recording_state = is_recording
+
+    # --- LEFT (RAW) ---
     if player.get_Data() is not None:
-        current_hash = util.hash_audio_data(player.get_Data())
-        if left_block.get('waveform_hash') != current_hash:
-            print("cập nhật waveform")
-            control.plot_waveform(left_block.get('ax_wf'),player)
-            left_block.get('canvas_wf').draw()
-            left_block.get('canvas_wf').flush_events()
-            left_block.get('canvas_wf').get_tk_widget().update_idletasks()
-            print("cập nhật spectrogram")
+        left_hash = util.hash_audio_data(player.get_Data())
+        if left_block.get('waveform_hash') != left_hash:
+            control.plot_waveform(left_block['ax_wf'], player)
+            left_block['canvas_wf'].draw()
+            left_block['canvas_wf'].flush_events()
+            left_block['canvas_wf'].get_tk_widget().update_idletasks()
             DrawSpectrogram(left_block, player)
-            left_block['waveform_hash'] = current_hash
-            
-            
-    if player.band_Audio :
-        Equalizer_hash = player.getEqualizerHash()
+            left_block['waveform_hash'] = left_hash
 
-        if right_block.get('waveform_hash') != Equalizer_hash :
-            Equalizer_data = player.getEqualizerData()
-            output_player.audio_data = Equalizer_data
-            output_player.sample_rate = player.sample_rate
-            print("cập nhật right waveform")
-            control.plot_waveform(right_block.get('ax_wf'),output_player)
-            right_block.get('canvas_wf').draw()
-            right_block.get('canvas_wf').flush_events()
-            right_block.get('canvas_wf').get_tk_widget().update_idletasks()
-            print("cập nhật right spectrogram")
-            DrawSpectrogram(right_block, output_player)
-            right_block['waveform_hash'] = Equalizer_hash
+    # --- RIGHT (EQ) ---
+    if is_recording:
+        # RECORD MODE: KHÔNG ghi đè output_player.audio_data!
+        if output_player.get_Data() is not None:
+            right_hash = util.hash_audio_data(output_player.get_Data())
+            if right_block.get('waveform_hash') != right_hash:
+                control.plot_waveform(right_block['ax_wf'], output_player)
+                right_block['canvas_wf'].draw()
+                right_block['canvas_wf'].flush_events()
+                right_block['canvas_wf'].get_tk_widget().update_idletasks()
+                DrawSpectrogram(right_block, output_player)
+                right_block['waveform_hash'] = right_hash
+        # Ẩn export nếu bạn chỉ muốn export ở mode file
+        # export_file_btn.pack_forget()
+    else:
+        # PLAYBACK/FILE MODE: cho phép dựng EQ từ file (band_Audio)
+        if player.band_Audio:
+            Equalizer_hash = player.getEqualizerHash()
+            if right_block.get('waveform_hash') != Equalizer_hash:
+                Equalizer_data = player.getEqualizerData()
+                output_player.set_data(Equalizer_data, player.sample_rate)
 
-            if output_player.audio_data is not None:
-                export_file_btn.pack(side=tk.RIGHT, padx=2)
+                control.plot_waveform(right_block['ax_wf'], output_player)
+                right_block['canvas_wf'].draw()
+                right_block['canvas_wf'].flush_events()
+                right_block['canvas_wf'].get_tk_widget().update_idletasks()
+                DrawSpectrogram(right_block, output_player)
+                right_block['waveform_hash'] = Equalizer_hash
 
+                if output_player.audio_data is not None:
+                    export_file_btn.pack(side=tk.RIGHT, padx=2)
+        else:
+            # nếu không có band_Audio nhưng vẫn có data ở output_player thì vẫn vẽ
+            if output_player.get_Data() is not None:
+                right_hash = util.hash_audio_data(output_player.get_Data())
+                if right_block.get('waveform_hash') != right_hash:
+                    control.plot_waveform(right_block['ax_wf'], output_player)
+                    right_block['canvas_wf'].draw()
+                    right_block['canvas_wf'].flush_events()
+                    right_block['canvas_wf'].get_tk_widget().update_idletasks()
+                    DrawSpectrogram(right_block, output_player)
+                    right_block['waveform_hash'] = right_hash
+
+    # export button auto-hide nếu không có data
     if output_player.audio_data is None:
         export_file_btn.pack_forget()
 
+    # auto-stop khi phát xong
     if player.is_finised:
         player.stop()
-
-    if output_player.is_finised :
+    if output_player.is_finised:
         output_player.stop()
-        
-    # Gọi lại chính nó sau 1000ms
+
+    # lặp lại
     root.after(1000, periodic_update)
 
 # --- THÊM: trạng thái ghi & controller ---
@@ -249,7 +278,7 @@ status_label = tk.Label(control_frame, textvariable=status_var, fg="green")
 status_label.pack(side=tk.LEFT, padx=10)
 
 # Tạo controller và gán refs UI
-app = control.AppController(player, ui_refs={'btn_record': btn_show, 'status_var': status_var})
+app = control.AppController(player, output_player, ui_refs={'btn_record': btn_show, 'status_var': status_var})
 
 # Gán nút "Bắt đầu ghi âm" thành toggle record
 btn_show.config(command=app.toggle_record)
